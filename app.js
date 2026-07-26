@@ -1413,15 +1413,6 @@ function launchConfetti() {
 //  INIT
 // ══════════════════════════════════════════════
 async function init() {
-  // Load EL key
-  EL_API_KEY = localStorage.getItem('wk_el_key') || '';
-  if (!EL_API_KEY) {
-    const meta = document.querySelector('meta[name="wk-el-key"]');
-    if (meta && meta.content) {
-      EL_API_KEY = meta.content;
-      localStorage.setItem('wk_el_key', EL_API_KEY);
-    }
-  }
 
   // Preload voices
   speechSynthesis.getVoices();
