@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>WonderKids Audio Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <!-- Cargamos tu app.js para leer exactamente los datos que tienes ahora -->
+  <script src="app.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f0c29; color: white; padding: 2rem; max-width: 800px; margin: 0 auto; }
+    h1 { color: #a78bfa; }
+    .box { background: rgba(255,255,255,0.1); padding: 1.5rem; border-radius: 12px; margin-top: 1rem; }
+    input { padding: 10px; border-radius: 6px; border: none; width: 300px; font-size: 1rem; }
+    button { padding: 10px 20px; font-size: 1rem; background: #fbbf24; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; color: black; }
+    button:disabled { background: #555; color: #888; cursor: not-allowed; }
+    #log { margin-top: 2rem; background: #000; padding: 1rem; border-radius: 8px; font-family: monospace; height: 300px; overflow-y: auto; white-space: pre-wrap; }
+    .progress-bar { width: 100%; background: #222; border-radius: 8px; overflow: hidden; margin-top: 1rem; }
+    .progress-fill { width: 0%; height: 20px; background: #a78bfa; transition: width 0.3s; }
+  </style>
+</head>
+<body>
+  <h1>Generador de Audios Offline (ElevenLabs)</h1>
+  <p>Esta herramienta extraerá todas las palabras, sílabas y letras de tu código <b>app.js</b> y se conectará a ElevenLabs para descargar un archivo `.zip` con todos los `.mp3`.</p>
+  
+  <div class="box">
+    <label>1. Pega tu clave privada de ElevenLabs:</label><br><br>
+    <input type="password" id="apiKey" placeholder="sk_...">
+    <button id="btnStart" onclick="startGeneration()">Iniciar Descarga</button>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div id="log">Esperando...</div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const log = msg => { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+    
+    // Función para limpiar texto y convertirlo en un nombre de archivo válido
+    const normalizeStr = str => str.toLowerCase().replace(/[^a-záéíóúñ]/g, '').trim();
+
+    async function startGeneration() {
+      // Limpiamos la clave por si copiaste algún espacio invisible o emoji por error
+      const apiKeyRaw = document.getElementById('apiKey').value;
+      const apiKey = apiKeyRaw.replace(/[^a-zA-Z0-9_-]/g, '');
+      
+      if (!apiKey) return alert('Por favor, ingresa tu clave de ElevenLabs.');
+      
+      document.getElementById('btnStart').disabled = true;
+      log('Recopilando palabras desde app.js...');
+
+      // Usar un Set para evitar audios duplicados
+      const uniqueTexts = new Set();
+      
+      // 1. Extraer Sílabas y Consonantes de SILABARIO_DATA
+      for (const [cons, items] of Object.entries(SILABARIO_DATA)) {
+        if (cons !== 'V') uniqueTexts.add(cons); // La consonante sola ('M', 'P', etc.)
+        items.forEach(i => {
+          uniqueTexts.add(i.syl); // Ej. 'MA'
+          const vowel = i.syl.slice(-1);
+          uniqueTexts.add(vowel); // Ej. 'A'
+        });
+      }
+      
+      // 2. Extraer de SILABAS_WORDS (español)
+      if (SILABAS_WORDS.es) {
+        SILABAS_WORDS.es.forEach(item => {
+          uniqueTexts.add(item.word);
+          item.syls.forEach(s => uniqueTexts.add(s));
+        });
+      }
+
+      // 3. Extraer de INICIALES (español)
+      if (INICIALES.es) {
+        INICIALES.es.forEach(item => uniqueTexts.add(item.name));
+      }
+
+      // 4. Extraer de WORDS (español)
+      if (WORDS.es) {
+        WORDS.es.forEach(item => uniqueTexts.add(item.word));
+      }
+
+      // 5. Extraer de PALABRAS_SETS
+      for (const [setName, items] of Object.entries(PALABRAS_SETS)) {
+        items.forEach(item => uniqueTexts.add(item.word));
+      }
+
+      // Convertir el Set a Array e ignorar strings vacíos
+      const textsToGenerate = Array.from(uniqueTexts).filter(t => t && normalizeStr(t).length > 0);
+      log(`Se encontraron ${textsToGenerate.length} audios únicos para generar.`);
+
+      const zip = new JSZip();
+      const audioFolder = zip.folder("audio");
+      
+      let count = 0;
+      for (let text of textsToGenerate) {
+        // Formatear texto igual que en app.js para evitar deletreos (M-U)
+        let speechText = text;
+        if (text === text.toUpperCase() && text.length <= 15) {
+          speechText = text.toLowerCase() + ".";
+        }
+
+        try {
+          const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE_ID}`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': apiKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg'
+            },
+            body: JSON.stringify({
+              text: speechText,
+              model_id: 'eleven_multilingual_v2',
+              voice_settings: { stability: 0.75, similarity_boost: 0.85, style: 0.3, use_speaker_boost: true, speed: 0.78 }
+            })
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            log(`❌ Error con "${text}": ${res.status} - ${errText}`);
+            continue;
+          }
+
+          const blob = await res.blob();
+          const filename = `${normalizeStr(text)}.mp3`;
+          audioFolder.file(filename, blob);
+          
+          count++;
+          log(`✅ Generado (${count}/${textsToGenerate.length}): ${filename}`);
+          document.getElementById('progressFill').style.width = `${(count / textsToGenerate.length) * 100}%`;
+          
+          // Esperar 400ms para no saturar la API de ElevenLabs
+          await new Promise(r => setTimeout(r, 400));
+        } catch (e) {
+          log(`❌ Error de red con "${text}": ${e.message}`);
+        }
+      }
+
+      log('\n📦 Empaquetando archivo ZIP, por favor espera...');
+      zip.generateAsync({type:"blob"}).then(function(content) {
+        saveAs(content, "wonderkids-audios.zip");
+        log('🎉 ¡Descarga completada! Descomprime el ZIP y pon la carpeta "audio" dentro de tu proyecto WonderKids.');
+        document.getElementById('btnStart').disabled = false;
+      });
+    }
+  </script>
+</body>
+</html>

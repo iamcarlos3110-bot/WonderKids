@@ -5,11 +5,8 @@
 'use strict';
 
 // ══════════════════════════════════════════════
-//  ELEVENLABS
+//  OFFLINE AUDIO
 // ══════════════════════════════════════════════
-const EL_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
-const EL_API_URL  = `https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE_ID}`;
-let EL_API_KEY    = '';
 const audioCache  = new Map();
 let currentAudio  = null;
 
@@ -568,45 +565,39 @@ function checkBadges() {
 }
 
 // ══════════════════════════════════════════════
-//  ELEVENLABS TTS
+//  OFFLINE AUDIO SYSTEM
 // ══════════════════════════════════════════════
-async function speakEL(text, opts = {}) {
-  if (!EL_API_KEY) { speakFallback(text); return; }
-  
-  // Prevent ElevenLabs from spelling out all-caps syllables/words (e.g., "MU" -> "M-U")
-  let speechText = text;
-  if (text === text.toUpperCase() && text.length <= 15) {
-    speechText = text.toLowerCase() + ".";
-  }
+const normalizeStr = str => str.toLowerCase().replace(/[^a-záéíóúñ]/g, '').trim();
 
-  const key = `${text}|${opts.speed||0.78}`;
-  if (audioCache.has(key)) { playBuf(audioCache.get(key)); return; }
-  try {
-    const r = await fetch(EL_API_URL, {
-      method:'POST',
-      headers:{'xi-api-key':EL_API_KEY,'Content-Type':'application/json','Accept':'audio/mpeg'},
-      body: JSON.stringify({
-        text: speechText, model_id:'eleven_multilingual_v2',
-        voice_settings:{ stability:opts.stability||0.75, similarity_boost:0.85,
-                          style:0.3, use_speaker_boost:true, speed:opts.speed||0.78 }
-      })
-    });
-    if (!r.ok) { speakFallback(text); return; }
-    const buf = await r.arrayBuffer();
-    audioCache.set(key, buf.slice(0));
-    playBuf(buf);
-  } catch(e) { speakFallback(text); }
-}
+function playLocalAudio(text) {
+  return new Promise((resolve) => {
+    const filename = normalizeStr(text);
+    if (!filename) { speakFallback(text); resolve(); return; }
 
-function playBuf(buf) {
-  try {
+    // No precargamos oraciones largas dinámicas, usamos fallback o se ignoran
+    if (text.includes('Felicidades') || text.length > 25) {
+      speakFallback(text);
+      resolve();
+      return;
+    }
+
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    const url = URL.createObjectURL(new Blob([buf], {type:'audio/mpeg'}));
-    const a = new Audio(url);
-    currentAudio = a;
-    a.play().catch(()=>{});
-    a.onended = () => { URL.revokeObjectURL(url); currentAudio = null; };
-  } catch(e){}
+    
+    const audio = new Audio(`audio/${filename}.mp3`);
+    currentAudio = audio;
+    
+    audio.onended = () => { currentAudio = null; resolve(); };
+    audio.onerror = () => { 
+      currentAudio = null; 
+      speakFallback(text); // Fallback si falta el MP3
+      resolve();
+    };
+    
+    audio.play().catch(() => {
+      speakFallback(text);
+      resolve();
+    });
+  });
 }
 
 let _bestVoice = null;
@@ -621,10 +612,15 @@ function bestVoice() {
   _bestVoice = vv.find(v => v.lang.startsWith('es')) || null;
   return _bestVoice;
 }
+
 function speakFallback(txt) {
   try {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(txt);
+    let speechText = txt;
+    if (txt === txt.toUpperCase() && txt.length <= 15) {
+      speechText = txt.toLowerCase();
+    }
+    const u = new SpeechSynthesisUtterance(speechText);
     u.lang = S.lang === 'es' ? 'es-ES' : 'en-US';
     u.rate = 0.78; u.pitch = 1.1; u.volume = 0.9;
     const bv = bestVoice();
@@ -633,24 +629,19 @@ function speakFallback(txt) {
   } catch(e){}
 }
 
-const speak = txt => speakEL(txt);
+const speak = txt => playLocalAudio(txt);
 
 async function speakPhonics(syl, cons) {
   speechSynthesis.cancel();
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (cons === 'V') { await speakEL(syl, {speed:0.7,stability:0.9}); return; }
+  if (cons === 'V') { await playLocalAudio(syl); return; }
+  
   const vowel = syl.slice(-1);
-  if (EL_API_KEY) {
-    await speakEL(cons,  {speed:0.62,stability:0.92});
-    await new Promise(r => setTimeout(r, 480));
-    await speakEL(vowel, {speed:0.62,stability:0.92});
-    await new Promise(r => setTimeout(r, 480));
-    await speakEL(syl,   {speed:0.75,stability:0.85});
-  } else {
-    speakFallback(cons);
-    setTimeout(() => speakFallback(vowel), 700);
-    setTimeout(() => speakFallback(syl),   1400);
-  }
+  await playLocalAudio(cons);
+  await new Promise(r => setTimeout(r, 480));
+  await playLocalAudio(vowel);
+  await new Promise(r => setTimeout(r, 480));
+  await playLocalAudio(syl);
 }
 
 // ══════════════════════════════════════════════
