@@ -1,262 +1,1521 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="WonderKids"/>
-  <meta name="mobile-web-app-capable" content="yes"/>
-  <meta name="theme-color" content="#0f0c29"/>
-  <title>WonderKids 🌈 — Aprende a Leer</title>
-  <meta name="description" content="WonderKids: aprende a leer con el Método Nacho. Sílabas, palabras y letras para niños 3-6 años."/>
-  <link rel="manifest" href="manifest.json"/>
-  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
-  <link rel="icon" href="icons/icon-192.png"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="styles.css"/>
-</head>
-<body>
+/* =============================================
+   WONDERKIDS 2.0 — app.js
+   Duolingo-style Educational App · Método Nacho
+   ============================================= */
+'use strict';
 
-  <!-- ── CONFETTI CANVAS ── -->
-  <canvas id="confetti-canvas"></canvas>
+// ══════════════════════════════════════════════
+//  TEXT-TO-SPEECH (navegador, sin claves ni servidores)
+// ══════════════════════════════════════════════
+// Nota: antes esta app enviaba las voces a la API de ElevenLabs usando una
+// clave incrustada en el HTML, visible para cualquiera que abriera el código
+// fuente. Se ha quitado por completo: ahora se usa la Web Speech API del
+// navegador (gratuita, sin claves que proteger) para toda la locución.
 
-  <!-- ── XP FLOAT CONTAINER ── -->
-  <div id="xp-float-pool"></div>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const S = {
+  // Profile
+  name:    localStorage.getItem('wk_name')   || '',
+  avatar:  localStorage.getItem('wk_avatar') || '🦄',
+  lang:    localStorage.getItem('wk_lang')   || 'es',
+  // Progress
+  xp:      +localStorage.getItem('wk_xp')    || 0,
+  games:   +localStorage.getItem('wk_games') || 0,
+  badges:  JSON.parse(localStorage.getItem('wk_badges') || '[]'),
+  traced:  JSON.parse(localStorage.getItem('wk_traced') || '[]'),
+  // Streak
+  lastPlay:  localStorage.getItem('wk_lastplay') || '',
+  streak:  +localStorage.getItem('wk_streak')  || 0,
+  // Lessons unlocked
+  unlocked: JSON.parse(localStorage.getItem('wk_unlocked') || '["vocales"]'),
+  // Performance tracking per item, used to weight the infinite review mode
+  perf: JSON.parse(localStorage.getItem('wk_perf') || '{}'),
+  // Hearts (5 max, refills over time)
+  hearts:  Math.min(5, +localStorage.getItem('wk_hearts') ?? 5),
+  heartsTime: +localStorage.getItem('wk_heartsTime') || 0,
+  // Game state
+  currentLesson: null,
+  gameStep: 0,
+  gameTotal: 5,
+  correctCount: 0,
+  startHearts: 5,
+  _pools: {},
+};
 
-  <!-- ══════════════════════════════════
-       ONBOARDING
-  ══════════════════════════════════ -->
-  <div id="screen-onboarding" class="screen onboarding-screen">
-    <div class="ob-inner">
-      <div class="ob-logo">🌈</div>
-      <h1 class="ob-title">WonderKids</h1>
-      <p class="ob-sub">¡La app para aprender a leer! 📖</p>
+const save = () => {
+  localStorage.setItem('wk_name',      S.name);
+  localStorage.setItem('wk_avatar',    S.avatar);
+  localStorage.setItem('wk_lang',      S.lang);
+  localStorage.setItem('wk_xp',        S.xp);
+  localStorage.setItem('wk_games',     S.games);
+  localStorage.setItem('wk_badges',    JSON.stringify(S.badges));
+  localStorage.setItem('wk_traced',    JSON.stringify(S.traced));
+  localStorage.setItem('wk_lastplay',  S.lastPlay);
+  localStorage.setItem('wk_streak',    S.streak);
+  localStorage.setItem('wk_unlocked',  JSON.stringify(S.unlocked));
+  localStorage.setItem('wk_hearts',    S.hearts);
+  localStorage.setItem('wk_heartsTime',S.heartsTime);
+  localStorage.setItem('wk_perf',      JSON.stringify(S.perf));
+};
 
-      <div class="ob-avatars" id="ob-avatars">
-        <button class="av-btn active" data-av="🦄" onclick="selectAvatar(this,'🦄')">🦄</button>
-        <button class="av-btn" data-av="🐸" onclick="selectAvatar(this,'🐸')">🐸</button>
-        <button class="av-btn" data-av="🦊" onclick="selectAvatar(this,'🦊')">🦊</button>
-        <button class="av-btn" data-av="🐼" onclick="selectAvatar(this,'🐼')">🐼</button>
-        <button class="av-btn" data-av="🦁" onclick="selectAvatar(this,'🦁')">🦁</button>
-      </div>
+// ══════════════════════════════════════════════
+//  PERFORMANCE TRACKING (para el Repaso Infinito)
+// ══════════════════════════════════════════════
+function recordPerf(key, ok) {
+  const p = S.perf[key] || {r:0,w:0};
+  if (ok) {
+    p.r++;
+    // Un acierto "perdona" un poco los fallos anteriores, para que un ítem
+    // ya dominado deje de considerarse "débil" tras un par de repasos buenos.
+    p.w = Math.max(0, p.w - 1);
+  } else {
+    p.w = Math.min(5, p.w + 1); // limita cuánto puede "pesar" un mismo fallo
+  }
+  S.perf[key] = p;
+  save();
+}
 
-      <label class="ob-label">¿Cómo te llamas?</label>
-      <input class="ob-input" id="ob-name" type="text"
-        placeholder="Escribe tu nombre..." maxlength="20"
-        onkeydown="if(event.key==='Enter') startApp()"/>
+// ══════════════════════════════════════════════
+//  ANTI-REPEAT POOL
+// ══════════════════════════════════════════════
+const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+const rand    = arr => arr[Math.floor(Math.random() * arr.length)];
+const $       = id  => document.getElementById(id);
 
-      <button class="ob-start-btn" onclick="startApp()">
-        ¡Empezar a aprender! 🚀
-      </button>
-    </div>
-  </div>
+function poolPick(key, arr) {
+  if (!S._pools[key] || S._pools[key].length === 0)
+    S._pools[key] = shuffle([...arr]);
+  return S._pools[key].pop();
+}
 
-  <!-- ══════════════════════════════════
-       HOME — RUTA DE APRENDIZAJE
-  ══════════════════════════════════ -->
-  <div id="screen-home" class="screen">
+// ══════════════════════════════════════════════
+//  STREAK
+// ══════════════════════════════════════════════
+function updateStreak() {
+  const today = new Date().toDateString();
+  if (S.lastPlay === today) return; // ya jugó hoy
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  if (S.lastPlay === yesterday) {
+    S.streak++;
+  } else if (S.lastPlay !== today) {
+    S.streak = 1;
+  }
+  S.lastPlay = today;
+  save();
+}
 
-    <!-- Header -->
-    <div class="home-header">
-      <div class="hh-left">
-        <div class="hh-avatar" id="hh-avatar">🦄</div>
-        <div class="hh-info">
-          <div class="hh-name" id="hh-name">¡Hola!</div>
-          <div class="hh-streak">🔥 <span id="hh-streak">0</span> días</div>
+// ══════════════════════════════════════════════
+//  HEARTS (5 max, +1 cada 30 min)
+// ══════════════════════════════════════════════
+function refillHearts() {
+  if (S.hearts >= 5) { S.heartsTime = 0; save(); return; }
+  const elapsed = Date.now() - S.heartsTime;
+  const refills = Math.floor(elapsed / (30 * 60 * 1000)); // 30 min
+  if (refills > 0) {
+    S.hearts = Math.min(5, S.hearts + refills);
+    S.heartsTime = refills >= 5 ? 0 : S.heartsTime + refills * 30 * 60 * 1000;
+    save();
+  }
+}
+function loseHeart() {
+  if (S.hearts > 0) {
+    S.hearts--;
+    if (S.hearts === 4 && S.heartsTime === 0) S.heartsTime = Date.now();
+    save();
+  }
+  renderHearts();
+}
+function renderHearts() {
+  const html = Array.from({length: 5}, (_, i) =>
+    `<span class="heart-icon ${i >= S.hearts ? 'lost' : ''}">❤️</span>`
+  ).join('');
+  const gh = $('gh-hearts');
+  const hh = $('hh-hearts');
+  if (gh) gh.innerHTML = html;
+  if (hh) hh.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════
+//  XP SYSTEM
+// ══════════════════════════════════════════════
+function addXP(amount, x, y) {
+  S.xp += amount; save();
+  updateHomeXP();
+  checkBadges();
+  // Float animation
+  if (x !== undefined && y !== undefined) floatXP(amount, x, y);
+}
+
+function floatXP(amount, x, y) {
+  const pool = $('xp-float-pool');
+  if (!pool) return;
+  const el = document.createElement('div');
+  el.className = 'xp-float';
+  el.textContent = `+${amount} ⚡`;
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
+  pool.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+}
+
+function updateHomeXP() {
+  const xpEl = $('hh-xp');
+  if (xpEl) xpEl.textContent = S.xp;
+  // XP bar: 100 XP per level, looping
+  const pct = (S.xp % 100);
+  const bar = $('xp-bar-fill');
+  if (bar) bar.style.width = pct + '%';
+  // Profile
+  const psXP = $('ps-xp');
+  if (psXP) psXP.textContent = S.xp;
+}
+
+// ══════════════════════════════════════════════
+//  TRANSLATIONS
+// ══════════════════════════════════════════════
+const T = {
+  es: {
+    correct: ['¡Correcto! 🎉', '¡Excelente! 🌟', '¡Increíble! 🚀', '¡Perfecto! 💫', '¡Genial! 🎊'],
+    correct_sub: ['¡Sigue así!', '¡Lo sabías!', '¡Eres una estrella!', '¡Muy bien hecho!'],
+    wrong: ['¡Casi! Intenta de nuevo 😊', '¡Ánimo! Tú puedes 💪', '¡La práctica hace al maestro! 🌈'],
+    wrong_sub: ['La respuesta correcta era:', 'Repasemos juntos:', '¡No te rindas!'],
+    trace_prompt: 'Elige una letra y trázala',
+    ini_prompt: '¿Con qué letra empieza?',
+    compl_prompt: '¿Cuál letra falta?',
+    sil_prompt: 'Toca las sílabas en orden',
+    sil_falta_prompt: '¿Qué sílaba falta?',
+    palabras_prompt: '¡Lee y toca la imagen!',
+    frase_prompt: 'Lee la frase y elige la imagen',
+    repaso_prompt: '🎓 Repaso infinito — ¡practica todo lo que sabes!',
+    next: 'Siguiente →',
+    done_btn: '✅ ¡Listo!',
+    clear_btn: '🗑️ Borrar',
+    question: 'Pregunta',
+    of: 'de',
+  },
+  en: {
+    correct: ['Correct! 🎉', 'Excellent! 🌟', 'Amazing! 🚀', 'Perfect! 💫', 'Great job! 🎊'],
+    correct_sub: ['Keep it up!', 'You knew it!', 'You\'re a star!', 'Well done!'],
+    wrong: ['Almost! Try again 😊', 'Keep going! 💪', 'Practice makes perfect! 🌈'],
+    wrong_sub: ['The correct answer was:', 'Let\'s review together:', 'Don\'t give up!'],
+    trace_prompt: 'Pick a letter and trace it',
+    ini_prompt: 'Which letter does it start with?',
+    compl_prompt: 'Which letter is missing?',
+    sil_prompt: 'Tap syllables in order',
+    sil_falta_prompt: 'Which syllable is missing?',
+    palabras_prompt: 'Read and tap the picture!',
+    frase_prompt: 'Read the sentence and pick the picture',
+    repaso_prompt: '🎓 Infinite review — practice everything you know!',
+    next: 'Next →',
+    done_btn: '✅ Done!',
+    clear_btn: '🗑️ Clear',
+    question: 'Question',
+    of: 'of',
+  }
+};
+const t = k => T[S.lang][k];
+
+// ══════════════════════════════════════════════
+//  DATA — LECCIONES (ruta de aprendizaje)
+// ══════════════════════════════════════════════
+const LESSONS = [
+  // UNIDAD 1: Las Vocales
+  { unit: 1, unitTitle: '📚 Unidad 1 · Las Vocales', id: 'vocales',
+    icon: '🌟', title: 'Las Vocales', desc: 'A · E · I · O · U', game: 'silabario', cons: 'V',
+    xp: 20, diff: 'easy', unlocks: ['ma_familia'] },
+  // UNIDAD 2: Familia MA
+  { unit: 2, unitTitle: '📚 Unidad 2 · Familia MA', id: 'ma_familia',
+    icon: '👩', title: 'MA · ME · MI · MO · MU', desc: 'La familia de la M', game: 'silabario', cons: 'M',
+    xp: 25, diff: 'easy', unlocks: ['ma_silabas'] },
+  { id: 'ma_silabas',
+    icon: '🔠', title: 'Une Sílabas con M', desc: 'MAMÁ, MONO, MUÑECA...', game: 'silabas',
+    xp: 30, diff: 'easy', unlocks: ['pa_familia'] },
+  // UNIDAD 3: Familia PA
+  { unit: 3, unitTitle: '📚 Unidad 3 · Familia PA', id: 'pa_familia',
+    icon: '👨', title: 'PA · PE · PI · PO · PU', desc: 'La familia de la P', game: 'silabario', cons: 'P',
+    xp: 25, diff: 'easy', unlocks: ['palabras_1'] },
+  { id: 'palabras_1',
+    icon: '📝', title: 'Leer Palabras I', desc: 'MAMÁ, PAPÁ, PIPA, MAPA...', game: 'palabras', wordSet: 'set1',
+    xp: 35, diff: 'easy', unlocks: ['sa_familia'] },
+  // UNIDAD 4: Familia SA
+  { unit: 4, unitTitle: '📚 Unidad 4 · Familia SA', id: 'sa_familia',
+    icon: '🐸', title: 'SA · SE · SI · SO · SU', desc: 'La familia de la S', game: 'silabario', cons: 'S',
+    xp: 25, diff: 'easy', unlocks: ['la_familia'] },
+  // UNIDAD 5: L, T, N
+  { unit: 5, unitTitle: '📚 Unidad 5 · Más Familias', id: 'la_familia',
+    icon: '🌙', title: 'LA · LE · LI · LO · LU', desc: 'La familia de la L', game: 'silabario', cons: 'L',
+    xp: 25, diff: 'easy', unlocks: ['ta_familia'] },
+  { id: 'ta_familia',
+    icon: '☕', title: 'TA · TE · TI · TO · TU', desc: 'La familia de la T', game: 'silabario', cons: 'T',
+    xp: 25, diff: 'easy', unlocks: ['palabras_2'] },
+  { id: 'palabras_2',
+    icon: '📖', title: 'Leer Palabras II', desc: 'SAPO, LUNA, TACO, SOPA...', game: 'palabras', wordSet: 'set2',
+    xp: 40, diff: 'medium', unlocks: ['que_falta'] },
+  // UNIDAD 6: Consolidación
+  { unit: 6, unitTitle: '📚 Unidad 6 · Practica', id: 'que_falta',
+    icon: '🧩', title: '¿Qué Sílaba Falta?', desc: 'Completa las palabras', game: 'silabafalta',
+    xp: 35, diff: 'medium', unlocks: ['iniciales_1'] },
+  { id: 'iniciales_1',
+    icon: '🖼️', title: '¿Con qué empieza?', desc: 'Letra inicial de cada palabra', game: 'iniciales',
+    xp: 30, diff: 'easy', unlocks: ['completa_1'] },
+  { id: 'completa_1',
+    icon: '🔤', title: 'Completa la Palabra', desc: '¿Cuál letra falta?', game: 'completa',
+    xp: 35, diff: 'medium', unlocks: ['ba_familia'] },
+  // UNIDAD 7: B, D, N, R, F
+  { unit: 7, unitTitle: '📚 Unidad 7 · Avanzado', id: 'ba_familia',
+    icon: '🍌', title: 'BA · BE · BI · BO · BU', desc: 'La familia de la B', game: 'silabario', cons: 'B',
+    xp: 30, diff: 'medium', unlocks: ['na_familia'] },
+  { id: 'na_familia',
+    icon: '☁️', title: 'NA · NE · NI · NO · NU', desc: 'La familia de la N', game: 'silabario', cons: 'N',
+    xp: 30, diff: 'medium', unlocks: ['tracing'] },
+  { id: 'tracing',
+    icon: '✏️', title: 'Trazar Letras', desc: 'Dibuja todas las letras', game: 'tracing',
+    xp: 25, diff: 'easy', unlocks: ['ra_familia'] },
+  { id: 'ra_familia',
+    icon: '🌹', title: 'RA · RE · RI · RO · RU', desc: 'La familia de la R', game: 'silabario', cons: 'R',
+    xp: 30, diff: 'hard', unlocks: ['da_familia'] },
+  // UNIDAD 8: Nuevas Familias
+  { unit: 8, unitTitle: '📚 Unidad 8 · Nuevas Familias', id: 'da_familia',
+    icon: '🎲', title: 'DA · DE · DI · DO · DU', desc: 'La familia de la D', game: 'silabario', cons: 'D',
+    xp: 30, diff: 'medium', unlocks: ['fa_familia'] },
+  { id: 'fa_familia',
+    icon: '🔥', title: 'FA · FE · FI · FO · FU', desc: 'La familia de la F', game: 'silabario', cons: 'F',
+    xp: 30, diff: 'medium', unlocks: ['ja_familia'] },
+  { id: 'ja_familia',
+    icon: '🦒', title: 'JA · JE · JI · JO · JU', desc: 'La familia de la J', game: 'silabario', cons: 'J',
+    xp: 30, diff: 'medium', unlocks: ['palabras_3'] },
+  { id: 'palabras_3',
+    icon: '📗', title: 'Leer Palabras III', desc: 'DADO, FOCA, JUGO, TREN...', game: 'palabras', wordSet: 'set3',
+    xp: 40, diff: 'medium', unlocks: ['silabas_avanzado'] },
+  { id: 'silabas_avanzado',
+    icon: '🧷', title: 'Sílabas Avanzadas', desc: 'DEDO, JIRAFA, DONA...', game: 'silabas',
+    xp: 35, diff: 'medium', unlocks: ['bra_familia'] },
+  // UNIDAD 9: Sílabas Trabadas
+  { unit: 9, unitTitle: '📚 Unidad 9 · Sílabas Trabadas', id: 'bra_familia',
+    icon: '💪', title: 'BRA · BRI · BRO · BRU', desc: 'Sílabas con BR', game: 'silabario', cons: 'BR',
+    xp: 35, diff: 'hard', unlocks: ['tra_familia'] },
+  { id: 'tra_familia',
+    icon: '🚂', title: 'TRA · TRE · TRI · TRO · TRU', desc: 'Sílabas con TR', game: 'silabario', cons: 'TR',
+    xp: 35, diff: 'hard', unlocks: ['completa_2'] },
+  { id: 'completa_2',
+    icon: '🔡', title: 'Completa Avanzado', desc: 'Palabras con todas las letras', game: 'completa',
+    xp: 40, diff: 'hard', unlocks: ['frases_1'] },
+  // UNIDAD 10: Lectura Real
+  { unit: 10, unitTitle: '📚 Unidad 10 · Lectura Real', id: 'frases_1',
+    icon: '💬', title: 'Lee Frases Cortas', desc: 'Tu primera lectura de frases', game: 'frases',
+    xp: 45, diff: 'hard', unlocks: ['repaso_final'] },
+  // UNIDAD 11: Repaso infinito (se desbloquea al terminar todo el método)
+  { unit: 11, unitTitle: '📚 Unidad 11 · Maestro Lector', id: 'repaso_final',
+    icon: '🎓', title: 'Repaso Infinito', desc: 'Practica todo lo aprendido, sin límite', game: 'repaso',
+    xp: 10, diff: 'hard', unlocks: [] },
+];
+
+// ══════════════════════════════════════════════
+//  GAME DATA
+// ══════════════════════════════════════════════
+const ALPHABET = 'ABCDEFGHIJKLMNOPRSTUVZ'.split('');
+
+const WORDS = {
+  es: [
+    {emoji:'🍎',word:'MANZANA',blank:0},{emoji:'🐱',word:'GATO',blank:1},
+    {emoji:'🐘',word:'ELEFANTE',blank:3},{emoji:'🌙',word:'LUNA',blank:2},
+    {emoji:'🐸',word:'RANA',blank:0},{emoji:'🚀',word:'COHETE',blank:2},
+    {emoji:'🦋',word:'MARIPOSA',blank:4},{emoji:'🐢',word:'TORTUGA',blank:3},
+    {emoji:'🌺',word:'FLOR',blank:1},{emoji:'🐬',word:'DELFIN',blank:2},
+    {emoji:'🦁',word:'LEON',blank:1},{emoji:'🐧',word:'PINGUINO',blank:3},
+    {emoji:'🍌',word:'PLATANO',blank:3},{emoji:'🏠',word:'CASITA',blank:1},
+    {emoji:'🎲',word:'DADO',blank:1},{emoji:'🔥',word:'FUEGO',blank:0},
+    {emoji:'🦒',word:'JIRAFA',blank:0},{emoji:'🚂',word:'TREN',blank:1},
+    {emoji:'🧙‍♀️',word:'BRUJA',blank:2},{emoji:'🍩',word:'DONA',blank:1},
+  ],
+  en: [
+    {emoji:'🍎',word:'APPLE',blank:1},{emoji:'🐱',word:'CAT',blank:1},
+    {emoji:'🐘',word:'ELEPHANT',blank:3},{emoji:'🌙',word:'MOON',blank:2},
+    {emoji:'🐸',word:'FROG',blank:2},{emoji:'🚀',word:'ROCKET',blank:3},
+    {emoji:'🦋',word:'BUTTERFLY',blank:4},{emoji:'🐢',word:'TURTLE',blank:4},
+  ]
+};
+
+const INICIALES = {
+  es:[
+    {emoji:'✈️',name:'Avión',  letter:'A'},{emoji:'🎈',name:'Globo',  letter:'G'},
+    {emoji:'🐰',name:'Conejo', letter:'C'},{emoji:'🎁',name:'Regalo', letter:'R'},
+    {emoji:'🌸',name:'Flor',   letter:'F'},{emoji:'🦁',name:'León',   letter:'L'},
+    {emoji:'🍌',name:'Plátano',letter:'P'},{emoji:'🐬',name:'Delfín', letter:'D'},
+    {emoji:'🐸',name:'Rana',   letter:'R'},{emoji:'🎵',name:'Música', letter:'M'},
+    {emoji:'🌊',name:'Ola',    letter:'O'},{emoji:'🍊',name:'Naranja',letter:'N'},
+    {emoji:'☀️',name:'Sol',    letter:'S'},{emoji:'🐯',name:'Tigre',  letter:'T'},
+    {emoji:'🎲',name:'Dado',   letter:'D'},{emoji:'🔥',name:'Fuego',  letter:'F'},
+    {emoji:'🦒',name:'Jirafa', letter:'J'},{emoji:'🧃',name:'Jugo',   letter:'J'},
+  ],
+  en:[
+    {emoji:'✈️',name:'Airplane',letter:'A'},{emoji:'🎈',name:'Balloon',letter:'B'},
+    {emoji:'🐰',name:'Rabbit',  letter:'R'},{emoji:'🎁',name:'Gift',   letter:'G'},
+    {emoji:'🌸',name:'Flower',  letter:'F'},{emoji:'🦁',name:'Lion',   letter:'L'},
+    {emoji:'🏠',name:'House',   letter:'H'},{emoji:'🐬',name:'Dolphin',letter:'D'},
+    {emoji:'🎵',name:'Music',   letter:'M'},{emoji:'🌊',name:'Ocean',  letter:'O'},
+    {emoji:'🐧',name:'Penguin', letter:'P'},{emoji:'☀️',name:'Sun',    letter:'S'},
+  ]
+};
+
+const SILABAS_WORDS = {
+  es:[
+    {emoji:'🐱',word:'GATO',    syls:['GA','TO']},
+    {emoji:'🌙',word:'LUNA',    syls:['LU','NA']},
+    {emoji:'🐸',word:'RANA',    syls:['RA','NA']},
+    {emoji:'🏠',word:'CASA',    syls:['CA','SA']},
+    {emoji:'🌹',word:'ROSA',    syls:['RO','SA']},
+    {emoji:'🦆',word:'PATO',    syls:['PA','TO']},
+    {emoji:'🍅',word:'TOMATE',  syls:['TO','MA','TE']},
+    {emoji:'🐢',word:'TORTUGA', syls:['TOR','TU','GA']},
+    {emoji:'🍌',word:'PLATANO', syls:['PLA','TA','NO']},
+    {emoji:'🐰',word:'CONEJO',  syls:['CO','NE','JO']},
+    {emoji:'🚀',word:'COHETE',  syls:['CO','HE','TE']},
+    {emoji:'🦁',word:'LEON',    syls:['LE','ON']},
+    {emoji:'🐴',word:'CABALLO', syls:['CA','BA','LLO']},
+    {emoji:'🕊️',word:'PALOMA',  syls:['PA','LO','MA']},
+    {emoji:'🐕',word:'PERRO',   syls:['PE','RRO']},
+    {emoji:'🪑',word:'MESA',    syls:['ME','SA']},
+    {emoji:'🐘',word:'ELEFANTE',syls:['E','LE','FAN','TE']},
+    {emoji:'🦋',word:'MARIPOSA',syls:['MA','RI','PO','SA']},
+    {emoji:'🌮',word:'TACO',    syls:['TA','CO']},
+    {emoji:'🍊',word:'NARANJA', syls:['NA','RAN','JA']},
+    {emoji:'🐬',word:'DELFIN',  syls:['DEL','FIN']},
+    {emoji:'🎲',word:'DEDO',    syls:['DE','DO']},
+    {emoji:'🦒',word:'JIRAFA',  syls:['JI','RA','FA']},
+    {emoji:'🍩',word:'DONA',    syls:['DO','NA']},
+    {emoji:'🧃',word:'JUGO',    syls:['JU','GO']},
+    {emoji:'🚜',word:'TRACTOR', syls:['TRAC','TOR']},
+    {emoji:'🧙‍♀️',word:'BRUJA',  syls:['BRU','JA']},
+  ],
+  en:[
+    {emoji:'🐱',word:'KITTEN', syls:['KIT','TEN']},
+    {emoji:'🐰',word:'RABBIT', syls:['RAB','BIT']},
+    {emoji:'🍌',word:'BANANA', syls:['BA','NA','NA']},
+    {emoji:'🐬',word:'DOLPHIN',syls:['DOL','PHIN']},
+    {emoji:'🌺',word:'FLOWER', syls:['FLOW','ER']},
+    {emoji:'🚀',word:'ROCKET', syls:['ROC','KET']},
+    {emoji:'🦁',word:'LION',   syls:['LI','ON']},
+    {emoji:'🐢',word:'TURTLE', syls:['TUR','TLE']},
+    {emoji:'🍎',word:'APPLE',  syls:['AP','PLE']},
+    {emoji:'🐴',word:'PONY',   syls:['PO','NY']},
+  ]
+};
+
+// Palabras por set para la ruta
+const PALABRAS_SETS = {
+  set1: [
+    {word:'MAMÁ',   emoji:'👩',distractors:['🐱','🚀','🍌']},
+    {word:'PAPÁ',   emoji:'👨',distractors:['🌙','🎈','🐸']},
+    {word:'PIPA',   emoji:'🎶',distractors:['🏠','🐘','🌺']},
+    {word:'MAPA',   emoji:'🗺️',distractors:['🦁','🐧','🍎']},
+    {word:'PUMA',   emoji:'🐆',distractors:['🐸','🌙','🚀']},
+  ],
+  set2: [
+    {word:'SAPO',   emoji:'🐸',distractors:['🐢','🌙','🚀']},
+    {word:'LUNA',   emoji:'🌙',distractors:['🍊','🐕','🎂']},
+    {word:'TACO',   emoji:'🌮',distractors:['🐰','🌹','🚀']},
+    {word:'SOPA',   emoji:'🍲',distractors:['🐸','🏠','🌙']},
+    {word:'MIEL',   emoji:'🍯',distractors:['🎂','🐱','⭐']},
+  ],
+  set3: [
+    {word:'DADO',  emoji:'🎲',distractors:['🐸','🌙','🚀']},
+    {word:'FOCA',  emoji:'🦭',distractors:['🐱','🎈','🌺']},
+    {word:'JUGO',  emoji:'🧃',distractors:['🐰','⭐','🎂']},
+    {word:'TREN',  emoji:'🚂',distractors:['🐕','🌹','🍎']},
+    {word:'BRUJA', emoji:'🧙‍♀️',distractors:['🐘','🌸','🎁']},
+  ],
+  default: [
+    {word:'GATO',   emoji:'🐱',distractors:['🐸','🦁','🌸']},
+    {word:'ROSA',   emoji:'🌹',distractors:['🐸','🍌','🚀']},
+    {word:'MESA',   emoji:'🪑',distractors:['🐰','🎁','🌊']},
+    {word:'BOTA',   emoji:'👢',distractors:['🎂','🐱','🌙']},
+    {word:'DADO',   emoji:'🎲',distractors:['🍊','🐕','⭐']},
+  ]
+};
+
+// Frases cortas para el juego de lectura comprensiva (Unidad 10)
+const FRASES = {
+  es: [
+    {text:'EL GATO SE SUBE A LA MESA',    emoji:'🐱',distractors:['🐶','🐸','🦆']},
+    {text:'LA LUNA SALE DE NOCHE',        emoji:'🌙',distractors:['☀️','⭐','🌈']},
+    {text:'PAPÁ MANEJA EL TREN',          emoji:'🚂',distractors:['🚀','🚗','⛵']},
+    {text:'LA BRUJA TIENE UN SOMBRERO',   emoji:'🧙‍♀️',distractors:['👸','🧑‍🚀','🤴']},
+    {text:'EL SAPO SALTA EN LA SOPA',     emoji:'🐸',distractors:['🐱','🐘','🦁']},
+    {text:'MAMÁ COMPRA UNA PIÑA',         emoji:'🍍',distractors:['🍎','🍌','🍇']},
+    {text:'EL BEBÉ TOMA SU LECHE',        emoji:'👶',distractors:['🐕','🦁','🐘']},
+    {text:'LA JIRAFA COME UNA HOJA',      emoji:'🦒',distractors:['🐧','🐢','🐬']},
+  ],
+  en: [
+    {text:'THE CAT SITS ON THE MAT',      emoji:'🐱',distractors:['🐶','🐸','🦆']},
+    {text:'THE SUN IS VERY HOT TODAY',    emoji:'☀️',distractors:['🌙','⭐','🌧️']},
+    {text:'DAD DRIVES THE TRAIN',         emoji:'🚂',distractors:['🚀','🚗','⛵']},
+    {text:'THE FROG JUMPS IN THE POND',   emoji:'🐸',distractors:['🐱','🐘','🦁']},
+  ]
+};
+
+const SILABARIO_DATA = {
+  V:[
+    {syl:'A',emoji:'🍎',word:'AVIÓN',   example:'A de Avión'},
+    {syl:'E',emoji:'⭐',word:'ESTRELLA',example:'E de Estrella'},
+    {syl:'I',emoji:'🏝️',word:'ISLA',    example:'I de Isla'},
+    {syl:'O',emoji:'👁️',word:'OJO',     example:'O de Ojo'},
+    {syl:'U',emoji:'🦄',word:'UNICORNIO',example:'U de Unicornio'},
+  ],
+  M:[
+    {syl:'MA',emoji:'👩',word:'MAMÁ',  example:'MA de Mamá'},
+    {syl:'ME',emoji:'🍯',word:'MIEL',  example:'ME de Miel'},
+    {syl:'MI',emoji:'🪄',word:'MIGA',  example:'MI de Miga'},
+    {syl:'MO',emoji:'🐒',word:'MONO',  example:'MO de Mono'},
+    {syl:'MU',emoji:'🧸',word:'MUÑECA',example:'MU de Muñeca'},
+  ],
+  P:[
+    {syl:'PA',emoji:'👨',word:'PAPÁ',  example:'PA de Papá'},
+    {syl:'PE',emoji:'🐕',word:'PERRO', example:'PE de Perro'},
+    {syl:'PI',emoji:'🍍',word:'PIÑA',  example:'PI de Piña'},
+    {syl:'PO',emoji:'🐔',word:'POLLO', example:'PO de Pollo'},
+    {syl:'PU',emoji:'🐙',word:'PULPO', example:'PU de Pulpo'},
+  ],
+  S:[
+    {syl:'SA',emoji:'🐸',word:'SAPO',   example:'SA de Sapo'},
+    {syl:'SE',emoji:'🌱',word:'SEMILLA',example:'SE de Semilla'},
+    {syl:'SI',emoji:'🪑',word:'SILLA',  example:'SI de Silla'},
+    {syl:'SO',emoji:'🍲',word:'SOPA',   example:'SO de Sopa'},
+    {syl:'SU',emoji:'🧃',word:'SUMO',   example:'SU de Sumo'},
+  ],
+  L:[
+    {syl:'LA',emoji:'🦎',word:'LAGARTO',example:'LA de Lagarto'},
+    {syl:'LE',emoji:'🥛',word:'LECHE',  example:'LE de Leche'},
+    {syl:'LI',emoji:'📚',word:'LIBRO',  example:'LI de Libro'},
+    {syl:'LO',emoji:'🦜',word:'LORO',   example:'LO de Loro'},
+    {syl:'LU',emoji:'🌙',word:'LUNA',   example:'LU de Luna'},
+  ],
+  T:[
+    {syl:'TA',emoji:'🥧',word:'TARTA',  example:'TA de Tarta'},
+    {syl:'TE',emoji:'☕',word:'TAZA',   example:'TE de Taza'},
+    {syl:'TI',emoji:'🐯',word:'TIGRE',  example:'TI de Tigre'},
+    {syl:'TO',emoji:'🍅',word:'TOMATE', example:'TO de Tomate'},
+    {syl:'TU',emoji:'🦅',word:'TUCÁN',  example:'TU de Tucán'},
+  ],
+  B:[
+    {syl:'BA',emoji:'🍌',word:'BANANA', example:'BA de Banana'},
+    {syl:'BE',emoji:'👶',word:'BEBÉ',   example:'BE de Bebé'},
+    {syl:'BI',emoji:'🚲',word:'BICI',   example:'BI de Bici'},
+    {syl:'BO',emoji:'👢',word:'BOTA',   example:'BO de Bota'},
+    {syl:'BU',emoji:'🦉',word:'BÚHO',   example:'BU de Búho'},
+  ],
+  N:[
+    {syl:'NA',emoji:'🍊',word:'NARANJA',example:'NA de Naranja'},
+    {syl:'NE',emoji:'❄️',word:'NIEVE',  example:'NE de Nieve'},
+    {syl:'NI',emoji:'👧',word:'NIÑA',   example:'NI de Niña'},
+    {syl:'NO',emoji:'🌙',word:'NOCHE',  example:'NO de Noche'},
+    {syl:'NU',emoji:'☁️',word:'NUBE',   example:'NU de Nube'},
+  ],
+  R:[
+    {syl:'RA',emoji:'🐸',word:'RANA',   example:'RA de Rana'},
+    {syl:'RE',emoji:'🎸',word:'REGALO', example:'RE de Regalo'},
+    {syl:'RI',emoji:'😄',word:'RISA',   example:'RI de Risa'},
+    {syl:'RO',emoji:'🌹',word:'ROSA',   example:'RO de Rosa'},
+    {syl:'RU',emoji:'🛞',word:'RUEDA',  example:'RU de Rueda'},
+  ],
+  D:[
+    {syl:'DA',emoji:'🎲',word:'DADO',      example:'DA de Dado'},
+    {syl:'DE',emoji:'👆',word:'DEDO',      example:'DE de Dedo'},
+    {syl:'DI',emoji:'🦕',word:'DINOSAURIO',example:'DI de Dinosaurio'},
+    {syl:'DO',emoji:'🍩',word:'DONA',      example:'DO de Dona'},
+    {syl:'DU',emoji:'🧝',word:'DUENDE',    example:'DU de Duende'},
+  ],
+  F:[
+    {syl:'FA',emoji:'🗼',word:'FARO',  example:'FA de Faro'},
+    {syl:'FE',emoji:'🎡',word:'FERIA', example:'FE de Feria'},
+    {syl:'FI',emoji:'🎉',word:'FIESTA',example:'FI de Fiesta'},
+    {syl:'FO',emoji:'🦭',word:'FOCA',  example:'FO de Foca'},
+    {syl:'FU',emoji:'🔥',word:'FUEGO', example:'FU de Fuego'},
+  ],
+  J:[
+    {syl:'JA',emoji:'🧼',word:'JABÓN', example:'JA de Jabón'},
+    {syl:'JE',emoji:'🧥',word:'JERSEY',example:'JE de Jersey'},
+    {syl:'JI',emoji:'🦒',word:'JIRAFA',example:'JI de Jirafa'},
+    {syl:'JO',emoji:'💎',word:'JOYA',  example:'JO de Joya'},
+    {syl:'JU',emoji:'🧃',word:'JUGO',  example:'JU de Jugo'},
+  ],
+  // Sílabas trabadas (2 consonantes + vocal) — el siguiente paso tras
+  // dominar las familias simples.
+  BR:[
+    {syl:'BRA',emoji:'💪',word:'BRAZO', example:'BRA de Brazo'},
+    {syl:'BRI',emoji:'🌬️',word:'BRISA', example:'BRI de Brisa'},
+    {syl:'BRO',emoji:'🖌️',word:'BROCHA',example:'BRO de Brocha'},
+    {syl:'BRU',emoji:'🧙‍♀️',word:'BRUJA', example:'BRU de Bruja'},
+  ],
+  TR:[
+    {syl:'TRA',emoji:'🚜',word:'TRACTOR', example:'TRA de Tractor'},
+    {syl:'TRE',emoji:'🚂',word:'TREN',    example:'TRE de Tren'},
+    {syl:'TRI',emoji:'🚲',word:'TRICICLO',example:'TRI de Triciclo'},
+    {syl:'TRO',emoji:'🪀',word:'TROMPO',  example:'TRO de Trompo'},
+    {syl:'TRU',emoji:'⛈️',word:'TRUENO',  example:'TRU de Trueno'},
+  ],
+};
+const CONS_ORDER = ['V','M','P','S','L','T','B','N','R','D','F','J','BR','TR'];
+
+const BADGES = [
+  {id:'first_game',emoji:'🎮',name:{es:'¡Primer Juego!',en:'First Game!'},
+   desc:{es:'Completaste tu primera lección',en:'Completed your first lesson'},
+   check:()=>S.games>=1},
+  {id:'star5',emoji:'⭐',name:{es:'5 Lecciones',en:'5 Lessons'},
+   desc:{es:'Completaste 5 lecciones',en:'Completed 5 lessons'},
+   check:()=>S.games>=5},
+  {id:'star20',emoji:'🌟',name:{es:'20 Lecciones',en:'20 Lessons'},
+   desc:{es:'Completaste 20 lecciones',en:'Completed 20 lessons'},
+   check:()=>S.games>=20},
+  {id:'xp100',emoji:'⚡',name:{es:'100 XP',en:'100 XP'},
+   desc:{es:'Ganaste 100 XP',en:'Earned 100 XP'},
+   check:()=>S.xp>=100},
+  {id:'xp500',emoji:'💫',name:{es:'500 XP',en:'500 XP'},
+   desc:{es:'Ganaste 500 XP',en:'Earned 500 XP'},
+   check:()=>S.xp>=500},
+  {id:'streak3',emoji:'🔥',name:{es:'3 días seguidos',en:'3-day streak'},
+   desc:{es:'Jugaste 3 días seguidos',en:'Played 3 days in a row'},
+   check:()=>S.streak>=3},
+  {id:'streak7',emoji:'🏅',name:{es:'1 semana',en:'1 week streak'},
+   desc:{es:'7 días seguidos',en:'7 days in a row'},
+   check:()=>S.streak>=7},
+  {id:'reader',emoji:'📖',name:{es:'Lector',en:'Reader'},
+   desc:{es:'Desbloqueaste 5 lecciones',en:'Unlocked 5 lessons'},
+   check:()=>S.unlocked.length>=5},
+  {id:'champ',emoji:'🏆',name:{es:'Campeón',en:'Champion'},
+   desc:{es:'Desbloqueaste 10 lecciones',en:'Unlocked 10 lessons'},
+   check:()=>S.unlocked.length>=10},
+  {id:'diploma_earned',emoji:'🎓',name:{es:'Diploma de Lectura',en:'Reading Diploma'},
+   desc:{es:'Completaste todo el Método Nacho',en:'Completed the whole method'},
+   check:()=>S.badges.includes('diploma_earned')},
+];
+
+function checkBadges() {
+  let any = false;
+  BADGES.forEach(b => {
+    if (!S.badges.includes(b.id) && b.check()) {
+      S.badges.push(b.id); any = true;
+    }
+  });
+  if (any) save();
+}
+
+// ══════════════════════════════════════════════
+//  VOICE SELECTION
+// ══════════════════════════════════════════════
+let _bestVoice = null;
+function bestVoice() {
+  if (_bestVoice) return _bestVoice;
+  const vv = speechSynthesis.getVoices();
+  // Primero: cualquier voz local (no de red) cuyo idioma sea español —
+  // esto cubre paquetes de voz nuevos descargados en Windows/Mac aunque
+  // tengan nombres distintos a los de siempre.
+  const esVoices = vv.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+  if (esVoices.length) {
+    const names = ['Google español','Microsoft Pablo','Microsoft Sabina','Microsoft Helena',
+                   'Microsoft Elvira','Microsoft Alvaro','Microsoft Dalia','Microsoft Raul',
+                   'Paulina','Monica','Natural'];
+    for (const n of names) {
+      const v = esVoices.find(x => x.name.includes(n));
+      if (v) { _bestVoice = v; return v; }
+    }
+    _bestVoice = esVoices[0];
+    return _bestVoice;
+  }
+  return null;
+}
+function speakFallback(txt) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = S.lang === 'es' ? 'es-ES' : 'en-US';
+    u.rate = 0.78; u.pitch = 1.1; u.volume = 0.9;
+    const bv = bestVoice();
+    if (bv) u.voice = bv;
+    speechSynthesis.speak(u);
+  } catch(e){}
+}
+
+const speak = txt => speakFallback(txt);
+
+function speakPhonics(syl, cons) {
+  speechSynthesis.cancel();
+  if (cons === 'V') { speakFallback(syl); return; }
+  const vowel = syl.slice(-1);
+  speakFallback(cons);
+  setTimeout(() => speakFallback(vowel), 700);
+  setTimeout(() => speakFallback(syl),   1400);
+}
+
+// ══════════════════════════════════════════════
+//  SCREENS
+// ══════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+//  ONBOARDING
+// ══════════════════════════════════════════════
+let _selectedAvatar = '🦄';
+function selectAvatar(btn, av) {
+  _selectedAvatar = av;
+  document.querySelectorAll('#ob-avatars .av-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function startApp() {
+  const nameInput = $('ob-name');
+  const name = nameInput ? nameInput.value.trim() : '';
+  if (!name) { nameInput && nameInput.focus(); return; }
+  S.name   = name;
+  S.avatar = _selectedAvatar;
+  save();
+  goHome();
+}
+
+// ══════════════════════════════════════════════
+//  HOME
+// ══════════════════════════════════════════════
+function goHome() {
+  showScreen('screen-home');
+  refillHearts();
+  updateStreak();
+  renderHomeHeader();
+  renderHearts();
+  renderLearningPath();
+  checkBadges();
+  updateHomeXP();
+}
+
+function renderHomeHeader() {
+  const av = $('hh-avatar');
+  const nm = $('hh-name');
+  const st = $('hh-streak');
+  if (av) av.textContent = S.avatar;
+  if (nm) nm.textContent = `¡Hola, ${S.name}! 👋`;
+  if (st) st.textContent = S.streak;
+}
+
+function renderLearningPath() {
+  const path = $('learning-path');
+  if (!path) return;
+
+  let lastUnit = 0;
+  let html = '';
+
+  LESSONS.forEach((lesson, idx) => {
+    const isUnlocked = S.unlocked.includes(lesson.id);
+    const isCompleted = S.badges.includes(`lesson_${lesson.id}`);
+    const isActive = isUnlocked && !isCompleted;
+    const isLocked = !isUnlocked;
+
+    // Unit header
+    if (lesson.unit && lesson.unit !== lastUnit) {
+      lastUnit = lesson.unit;
+      if (idx > 0) html += `<div class="path-connector"></div>`;
+      html += `
+        <div class="path-unit-header">
+          <div class="puh-icon">${lesson.unitTitle.split('·')[0].trim()}</div>
+          <div class="puh-info">
+            <div class="puh-title">${lesson.unitTitle.split('·').slice(1).join('·').trim()}</div>
+            <div class="puh-sub">Sección ${lesson.unit}</div>
+          </div>
         </div>
-      </div>
-      <div class="hh-right">
-        <div class="hh-hearts" id="hh-hearts"></div>
-        <div class="hh-xp">
-          <div class="hh-xp-val">⚡<span id="hh-xp">0</span></div>
+      `;
+    } else if (idx > 0) {
+      html += `<div class="path-connector"></div>`;
+    }
+
+    const wrapClass = isCompleted ? 'completed' : isActive ? 'active' : 'locked';
+    const iconWrap  = isCompleted ? 'done-wrap'  : isActive ? 'active-wrap' : 'locked-wrap';
+    const icon      = isLocked ? '🔒' : lesson.icon;
+    const onclick   = isLocked ? '' : `onclick="launchLesson('${lesson.id}')"`;
+
+    html += `
+      <div class="lesson-node ${wrapClass}" ${onclick}>
+        <div class="ln-icon-wrap ${iconWrap}">
+          <span>${icon}</span>
+          ${isCompleted ? '<div class="ln-check">✓</div>' : ''}
         </div>
-      </div>
-    </div>
-
-    <!-- XP Bar -->
-    <div class="xp-bar-wrap">
-      <div class="xp-bar-fill" id="xp-bar-fill" style="width:0%"></div>
-    </div>
-
-    <!-- Ruta de aprendizaje -->
-    <div class="learning-path" id="learning-path"></div>
-
-    <!-- Bottom Nav -->
-    <nav class="bottom-nav">
-      <button class="bnav-btn active" onclick="goHome()">
-        <span class="bnav-icon">🏠</span>
-        <span class="bnav-label">Inicio</span>
-      </button>
-      <button class="bnav-btn" onclick="goToTrophies()">
-        <span class="bnav-icon">🏆</span>
-        <span class="bnav-label">Logros</span>
-      </button>
-      <button class="bnav-btn" onclick="goToProfile()">
-        <span class="bnav-icon">👤</span>
-        <span class="bnav-label">Perfil</span>
-      </button>
-    </nav>
-  </div>
-
-  <!-- ══════════════════════════════════
-       GAME SCREEN
-  ══════════════════════════════════ -->
-  <div id="screen-game" class="screen">
-
-    <!-- Game Header -->
-    <div class="game-header">
-      <button class="gh-close" onclick="exitGame()" aria-label="Salir">✕</button>
-      <div class="gh-progress">
-        <div class="gh-prog-bar">
-          <div class="gh-prog-fill" id="gh-prog-fill"></div>
-          <div class="gh-prog-shimmer"></div>
+        <div class="ln-info">
+          <div class="ln-title">${lesson.title}</div>
+          <div class="ln-desc">${lesson.desc}</div>
+          <div class="ln-meta">
+            <span class="ln-xp">⚡ ${lesson.xp} XP</span>
+            <span class="ln-diff diff-${lesson.diff}">${lesson.diff === 'easy' ? 'Fácil' : lesson.diff === 'medium' ? 'Medio' : 'Difícil'}</span>
+          </div>
         </div>
-        <div class="gh-prog-label" id="gh-prog-label">1 / 5</div>
+        <div class="ln-arrow">›</div>
+        ${isActive ? '<div class="ln-new-badge">¡Jugar!</div>' : ''}
       </div>
-      <div class="gh-hearts" id="gh-hearts"></div>
-    </div>
+    `;
+  });
 
-    <!-- Game Body -->
-    <div class="game-body" id="game-body"></div>
+  path.innerHTML = html;
+}
 
-    <!-- Bottom Sheet Feedback -->
-    <div class="feedback-sheet" id="feedback-sheet">
-      <div class="fs-inner" id="fs-inner">
-        <div class="fs-icon" id="fs-icon">✅</div>
-        <div class="fs-content">
-          <div class="fs-title" id="fs-title">¡Correcto!</div>
-          <div class="fs-sub"   id="fs-sub"></div>
-        </div>
-        <button class="fs-btn" id="fs-btn">Siguiente →</button>
-      </div>
-    </div>
+// ══════════════════════════════════════════════
+//  GAME ENGINE
+// ══════════════════════════════════════════════
+let currentLessonData = null;
+let silState = {};
+let tracingCurrent = 'A';
+let traceCtx = null, traceDrawing = false, traceHasStroke = false;
 
-  </div>
+function launchLesson(id) {
+  if (S.hearts <= 0) {
+    showNoHeartsToast();
+    return;
+  }
+  const lesson = LESSONS.find(l => l.id === id);
+  if (!lesson) return;
+  currentLessonData = lesson;
+  S.currentLesson = id;
+  S.gameStep    = 0;
+  S.gameTotal   = lesson.game === 'tracing' ? 1 : lesson.game === 'repaso' ? 20 : 5;
+  S.correctCount = 0;
+  S.startHearts  = S.hearts;
 
-  <!-- ══════════════════════════════════
-       TROPHIES SCREEN
-  ══════════════════════════════════ -->
-  <div id="screen-trophies" class="screen">
-    <div class="subj-header">
-      <button class="back-btn" onclick="goHome()">‹</button>
-      <div class="subj-header-title">🏆 Mis Logros</div>
-      <div></div>
-    </div>
-    <div class="trophy-stats">
-      <div class="t-stat">
-        <div class="t-stat-val" id="t-xp">0</div>
-        <div class="t-stat-lbl">⚡ XP</div>
-      </div>
-      <div class="t-stat">
-        <div class="t-stat-val" id="t-streak">0</div>
-        <div class="t-stat-lbl">🔥 Racha</div>
-      </div>
-      <div class="t-stat">
-        <div class="t-stat-val" id="t-games">0</div>
-        <div class="t-stat-lbl">🎮 Juegos</div>
-      </div>
-    </div>
-    <div class="badges-full-grid" id="badges-full-grid"></div>
-    <nav class="bottom-nav">
-      <button class="bnav-btn" onclick="goHome()">
-        <span class="bnav-icon">🏠</span>
-        <span class="bnav-label">Inicio</span>
-      </button>
-      <button class="bnav-btn active" onclick="goToTrophies()">
-        <span class="bnav-icon">🏆</span>
-        <span class="bnav-label">Logros</span>
-      </button>
-      <button class="bnav-btn" onclick="goToProfile()">
-        <span class="bnav-icon">👤</span>
-        <span class="bnav-label">Perfil</span>
-      </button>
-    </nav>
-  </div>
+  // Set silabario consonant if needed
+  if (lesson.cons) window._activeCons = lesson.cons;
+  // Set palabras word set if needed
+  if (lesson.wordSet) window._activeWordSet = lesson.wordSet;
 
-  <!-- ══════════════════════════════════
-       PROFILE SCREEN
-  ══════════════════════════════════ -->
-  <div id="screen-profile" class="screen">
-    <div class="subj-header">
-      <button class="back-btn" onclick="goHome()">‹</button>
-      <div class="subj-header-title">👤 Mi Perfil</div>
-      <div></div>
-    </div>
-    <div class="profile-body">
-      <div class="profile-avatar-big" id="profile-avatar-big">🦄</div>
-      <div class="profile-name-big" id="profile-name-big">Jugador</div>
-      <div class="profile-stats-row">
-        <div class="ps-item"><span class="ps-val" id="ps-xp">0</span><span class="ps-lbl">⚡ XP</span></div>
-        <div class="ps-item"><span class="ps-val" id="ps-streak">0</span><span class="ps-lbl">🔥 Racha</span></div>
-        <div class="ps-item"><span class="ps-val" id="ps-games">0</span><span class="ps-lbl">🎮 Juegos</span></div>
-      </div>
-      <div class="profile-section-title">Cambia tu avatar</div>
-      <div class="profile-avatars">
-        <button class="av-btn" data-av="🦄" onclick="changeAvatar(this,'🦄')">🦄</button>
-        <button class="av-btn" data-av="🐸" onclick="changeAvatar(this,'🐸')">🐸</button>
-        <button class="av-btn" data-av="🦊" onclick="changeAvatar(this,'🦊')">🦊</button>
-        <button class="av-btn" data-av="🐼" onclick="changeAvatar(this,'🐼')">🐼</button>
-        <button class="av-btn" data-av="🦁" onclick="changeAvatar(this,'🦁')">🦁</button>
-      </div>
-      <div class="profile-section-title">Idioma</div>
-      <div class="lang-toggle-wrap">
-        <button class="lang-toggle-btn" id="lang-es-btn" onclick="setLang('es')">🇪🇸 Español</button>
-        <button class="lang-toggle-btn" id="lang-en-btn" onclick="setLang('en')">🇺🇸 English</button>
-      </div>
-      <button class="reset-btn" onclick="confirmReset()">🗑️ Reiniciar progreso</button>
-    </div>
-    <nav class="bottom-nav">
-      <button class="bnav-btn" onclick="goHome()">
-        <span class="bnav-icon">🏠</span>
-        <span class="bnav-label">Inicio</span>
-      </button>
-      <button class="bnav-btn" onclick="goToTrophies()">
-        <span class="bnav-icon">🏆</span>
-        <span class="bnav-label">Logros</span>
-      </button>
-      <button class="bnav-btn active" onclick="goToProfile()">
-        <span class="bnav-icon">👤</span>
-        <span class="bnav-label">Perfil</span>
-      </button>
-    </nav>
-  </div>
+  showScreen('screen-game');
+  updateGameProgress();
+  renderGame(lesson.game);
+}
 
-  <!-- ══════════════════════════════════
-       LESSON COMPLETE OVERLAY
-  ══════════════════════════════════ -->
-  <div id="lesson-complete" class="lesson-complete-overlay">
-    <div class="lc-card">
-      <div class="lc-trophy">🏆</div>
-      <div class="lc-title">¡Lección Completa!</div>
-      <div class="lc-stats">
-        <div class="lc-stat"><div class="lc-sv" id="lc-xp">+50</div><div class="lc-sl">⚡ XP</div></div>
-        <div class="lc-stat"><div class="lc-sv" id="lc-acc">100%</div><div class="lc-sl">✅ Aciertos</div></div>
-        <div class="lc-stat"><div class="lc-sv" id="lc-hearts">❤️❤️❤️</div><div class="lc-sl">Vidas</div></div>
-      </div>
-      <button class="lc-btn" onclick="closeLessonComplete()">¡Continuar! 🚀</button>
-    </div>
-  </div>
+function exitGame() {
+  hideFeedbackSheet();
+  S.currentLesson = null;
+  goHome();
+}
 
-  <!-- ══════════════════════════════════
-       DIPLOMA OVERLAY (fin del método completo)
-  ══════════════════════════════════ -->
-  <div id="diploma-overlay" class="diploma-overlay">
-    <div class="dip-card">
-      <div class="dip-medal">🏅</div>
-      <div class="dip-title">¡Diploma de Lectura!</div>
-      <div class="dip-name" id="dip-name">Jugador</div>
-      <div class="dip-sub">Completaste todo el Método Nacho 🎉</div>
-      <div class="lc-stats">
-        <div class="lc-stat"><div class="lc-sv" id="dip-xp">0</div><div class="lc-sl">⚡ XP Total</div></div>
-        <div class="lc-stat"><div class="lc-sv" id="dip-games">0</div><div class="lc-sl">🎮 Lecciones</div></div>
-      </div>
-      <div class="dip-next">🎓 Desbloqueaste el <strong>Repaso Infinito</strong>: sigue practicando todo lo aprendido sin límite.</div>
-      <button class="lc-btn" onclick="closeDiploma()">¡Sigo practicando! 🚀</button>
-    </div>
-  </div>
+function updateGameProgress() {
+  const pct = S.gameTotal === 1 ? 0 : Math.round((S.gameStep / S.gameTotal) * 100);
+  const fill = $('gh-prog-fill');
+  const lbl  = $('gh-prog-label');
+  if (fill) fill.style.width = pct + '%';
+  if (lbl)  lbl.textContent  = `${Math.min(S.gameStep + 1, S.gameTotal)} / ${S.gameTotal}`;
+}
 
-  <script src="app.js"></script>
-</body>
-</html>
+function renderGame(gameId) {
+  updateGameProgress();
+  const body = $('game-body');
+  if (!body) return;
+  switch(gameId) {
+    case 'silabario':  renderSilabario();  break;
+    case 'silabas':    renderSilabas();    break;
+    case 'silabafalta':renderSilabaFalta();break;
+    case 'iniciales':  renderIniciales();  break;
+    case 'completa':   renderCompleta();   break;
+    case 'palabras':   renderPalabras();   break;
+    case 'tracing':    renderTracing();    break;
+    case 'frases':     renderFrases();     break;
+    case 'repaso':     renderRepaso();     break;
+  }
+}
+
+// ── FEEDBACK SYSTEM ──────────────────────────
+function showFeedbackSheet(correct, subtitle, onNext) {
+  const sheet   = $('feedback-sheet');
+  const inner   = $('fs-inner');
+  const icon    = $('fs-icon');
+  const title   = $('fs-title');
+  const sub     = $('fs-sub');
+  const btn     = $('fs-btn');
+
+  inner.className = `fs-inner ${correct ? 'correct' : 'wrong'}`;
+  icon.textContent  = correct ? '✅' : '❌';
+  title.textContent = correct ? rand(t('correct')) : rand(t('wrong'));
+  sub.textContent   = subtitle || (correct ? rand(t('correct_sub')) : rand(t('wrong_sub')));
+  btn.textContent   = t('next');
+
+  if (correct) {
+    const xpGain = currentLessonData ? Math.ceil(currentLessonData.xp / S.gameTotal) : 5;
+    // XP float at center screen
+    addXP(xpGain, window.innerWidth / 2 - 30, window.innerHeight / 2);
+    S.correctCount++;
+  } else {
+    loseHeart();
+    if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+  }
+
+  sheet.classList.add('show');
+
+  const next = () => {
+    btn.removeEventListener('click', next);
+    hideFeedbackSheet();
+    S.gameStep++;
+    if (S.gameStep >= S.gameTotal) {
+      finishLesson();
+    } else {
+      renderGame(currentLessonData.game);
+    }
+  };
+  btn.addEventListener('click', next);
+}
+
+function hideFeedbackSheet() {
+  const sheet = $('feedback-sheet');
+  if (sheet) sheet.classList.remove('show');
+}
+
+function finishLesson() {
+  // Mark lesson complete
+  const lid = currentLessonData.id;
+  if (!S.badges.includes(`lesson_${lid}`)) {
+    S.badges.push(`lesson_${lid}`);
+  }
+  // Unlock next lessons
+  (currentLessonData.unlocks || []).forEach(u => {
+    if (!S.unlocked.includes(u)) S.unlocked.push(u);
+  });
+  S.games++;
+  save();
+  checkBadges();
+  updateStreak();
+  checkDiploma();
+
+  // Show lesson complete overlay
+  const xpEarned = currentLessonData.xp;
+  addXP(Math.ceil(xpEarned * 0.5)); // bonus XP for completion
+  const acc = Math.round((S.correctCount / S.gameTotal) * 100);
+
+  $('lc-xp').textContent     = `+${xpEarned}`;
+  $('lc-acc').textContent    = acc + '%';
+  $('lc-hearts').textContent = '❤️'.repeat(S.hearts);
+
+  const overlay = $('lesson-complete');
+  overlay.classList.add('show');
+  launchConfetti();
+}
+
+function closeLessonComplete() {
+  $('lesson-complete').classList.remove('show');
+  if (_pendingDiploma) { _pendingDiploma = false; showDiplomaOverlay(); return; }
+  goHome();
+}
+
+// ══════════════════════════════════════════════
+//  DIPLOMA — se otorga al terminar todo el método
+// ══════════════════════════════════════════════
+let _pendingDiploma = false;
+function checkDiploma() {
+  const contentLessons = LESSONS.filter(l => l.id !== 'repaso_final');
+  const allDone = contentLessons.every(l => S.badges.includes(`lesson_${l.id}`));
+  if (allDone && !S.badges.includes('diploma_earned')) {
+    S.badges.push('diploma_earned');
+    save();
+    _pendingDiploma = true;
+  }
+}
+function showDiplomaOverlay() {
+  $('dip-name').textContent  = S.name || 'Jugador';
+  $('dip-xp').textContent    = S.xp;
+  $('dip-games').textContent = S.games;
+  $('diploma-overlay').classList.add('show');
+  launchConfetti();
+}
+function closeDiploma() {
+  $('diploma-overlay').classList.remove('show');
+  goHome();
+}
+
+function showNoHeartsToast() {
+  const mins = Math.ceil(((S.heartsTime + 30 * 60 * 1000) - Date.now()) / 60000);
+  alert(`😔 Sin corazones. Se recargará en ~${mins > 0 ? mins : 1} minuto(s).`);
+}
+
+// ══════════════════════════════════════════════
+//  GAME: SILABARIO
+// ══════════════════════════════════════════════
+function renderSilabario() {
+  const cons  = window._activeCons || 'M';
+  const items = SILABARIO_DATA[cons] || SILABARIO_DATA['M'];
+  const quiz  = poolPick(`silabario_${cons}`, items);
+  const isVowel = cons === 'V';
+
+  const consLabel = {
+    V:'🌟 Vocales',M:'M · Mamá',P:'P · Papá',S:'S · Sapo',
+    L:'L · Luna', T:'T · Tarta',B:'B · Bebé',N:'N · Nube',R:'R · Rana',
+    D:'D · Dado', F:'F · Faro', J:'J · Jirafa',
+    BR:'BR · Brazo', TR:'TR · Tren',
+  };
+
+  const cards = items.map(item => {
+    const vowel  = item.syl[item.syl.length - 1];
+    const vClass = 'vowel-' + vowel.toLowerCase();
+    const eq = isVowel
+      ? `<div class="sc-syl-big">${item.syl}</div><div class="sc-example">${item.example}</div>`
+      : `<div class="sc-eq-row">
+           <span class="sc-cons">${cons}</span><span class="sc-plus">+</span>
+           <span class="sc-vowel">${vowel}</span><span class="sc-plus">=</span>
+           <span class="sc-syl-big">${item.syl}</span>
+         </div>
+         <div class="sc-example">${item.example}</div>`;
+    return `
+      <div class="syl-card ${vClass}" id="sc-${item.syl}"
+           onclick="tapSylCard('${item.syl}','${cons}','${quiz.syl}')">
+        <span class="sc-emoji">${item.emoji}</span>
+        <span class="sc-word">${item.word}</span>
+        ${eq}
+      </div>`;
+  }).join('');
+
+  $('game-body').innerHTML = `
+    <div class="silabario-wrap">
+      <div class="nacho-header">
+        <div class="nacho-family">${consLabel[cons] || cons}</div>
+        <div class="nacho-label">Método Nacho</div>
+      </div>
+      <div class="sil-quiz-prompt">
+        ${isVowel ? `¡Toca la vocal` : `¡Toca la sílaba`} <strong>${quiz.syl}</strong>!
+        <span class="sil-audio-hint" onclick="speakPhonics('${quiz.syl}','${cons}')">🔊</span>
+      </div>
+      <div class="syl-cards-grid">${cards}</div>
+      <div class="sil-hint">Toca cualquier carta para escucharla 🔊</div>
+    </div>`;
+  setTimeout(() => speakPhonics(quiz.syl, cons), 700);
+}
+
+function tapSylCard(syl, cons, quizSyl) {
+  const card = $(`sc-${syl}`);
+  if (card) { card.classList.add('tapped'); setTimeout(() => card.classList.remove('tapped'), 250); }
+  speakPhonics(syl, cons);
+  recordPerf(`sil:${cons}:${quizSyl}`, syl === quizSyl);
+  if (syl === quizSyl) {
+    if (card) card.classList.add('correct-card');
+    showFeedbackSheet(true, `${syl} — ${SILABARIO_DATA[cons]?.find(i=>i.syl===syl)?.example || ''}`);
+  } else {
+    if (card) { card.classList.add('wrong-card'); setTimeout(() => card.classList.remove('wrong-card'), 500); }
+    showFeedbackSheet(false, `La sílaba correcta era: ${quizSyl}`);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: UNE SÍLABAS
+// ══════════════════════════════════════════════
+function renderSilabas() {
+  const item = poolPick(`silabas_${S.lang}`, SILABAS_WORDS[S.lang]);
+  silState = { word: item, placed: [], shuffled: shuffle([...item.syls]) };
+
+  const slots = item.syls.map((_, i) => `<div class="syl-slot" id="ss-${i}"></div>`).join('');
+  const btns  = silState.shuffled.map((s, i) =>
+    `<button class="syl-btn ${vowelClass(s)}" id="sb-${i}" onclick="placeSyl('${s}',${i})">${s}</button>`
+  ).join('');
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('sil_prompt')}<br><small>Forma la palabra</small></p>
+    <div class="silabas-wrap">
+      <div class="big-emoji-wrap"><div class="big-emoji" onclick="speak('${item.word}')">${item.emoji}</div></div>
+      <div class="syl-slots">${slots}</div>
+      <div class="syl-btns">${btns}</div>
+    </div>`;
+  setTimeout(() => speak(item.word), 400);
+}
+
+function placeSyl(syl, btnIdx) {
+  const btn = $(`sb-${btnIdx}`);
+  if (!btn || btn.disabled) return;
+  btn.disabled = true; btn.classList.add('used');
+  silState.placed.push(syl);
+  const slot = $(`ss-${silState.placed.length - 1}`);
+  if (slot) { slot.textContent = syl; slot.classList.add('filled'); speak(syl); }
+  if (silState.placed.length === silState.word.syls.length) {
+    const ok = silState.placed.every((s, i) => s === silState.word.syls[i]);
+    silState.word.syls.forEach((_, i) => {
+      const sl = $(`ss-${i}`);
+      if (sl) sl.classList.add(ok ? 'correct' : 'wrong');
+    });
+    recordPerf(`word:${silState.word.word}`, ok);
+    setTimeout(() => {
+      if (ok) speak(silState.word.word);
+      showFeedbackSheet(ok, ok ? silState.word.word : `Orden correcto: ${silState.word.syls.join(' · ')}`);
+    }, ok ? 350 : 500);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: ¿QUÉ SÍLABA FALTA?
+// ══════════════════════════════════════════════
+function renderSilabaFalta() {
+  const item    = poolPick(`silabafalta_${S.lang}`, SILABAS_WORDS[S.lang]);
+  const bi      = Math.floor(Math.random() * item.syls.length);
+  const correct = item.syls[bi];
+  const allSyls = SILABAS_WORDS[S.lang].flatMap(w => w.syls).filter(s => s !== correct);
+  const opts    = shuffle([correct, ...shuffle([...new Set(allSyls)]).slice(0, 3)]);
+
+  const displayed = item.syls.map((s, i) =>
+    i === bi
+      ? `<div class="syl-tile blank" id="sf-blank">?</div>`
+      : `<div class="syl-tile filled-show ${vowelClass(s)}">${s}</div>`
+  ).join('');
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('sil_falta_prompt')}</p>
+    <div class="silabas-wrap">
+      <div class="big-emoji-wrap"><div class="big-emoji" onclick="speak('${item.word}')">${item.emoji}</div></div>
+      <div class="syl-display">${displayed}</div>
+      <div class="syl-opts-row">
+        ${opts.map(s =>
+          `<button class="syl-opt-btn ${vowelClass(s)}" id="so-${s}"
+             onclick="checkSilabaFalta('${s}','${correct}','${item.word}')">${s}</button>`
+        ).join('')}
+      </div>
+    </div>`;
+  setTimeout(() => speak(item.word), 400);
+}
+
+function checkSilabaFalta(chosen, correct, word) {
+  document.querySelectorAll('.syl-opt-btn').forEach(b => b.disabled = true);
+  const blank = $('sf-blank');
+  blank.textContent = chosen;
+  recordPerf(`sf:${word}`, chosen === correct);
+  if (chosen === correct) {
+    blank.classList.remove('blank'); blank.classList.add('filled-show', 'correct-syl');
+    speak(word);
+    showFeedbackSheet(true, word);
+  } else {
+    blank.classList.add('wrong-syl');
+    const cb = $(`so-${correct}`); if (cb) cb.classList.add('correct-opt');
+    setTimeout(() => {
+      blank.textContent = '?'; blank.classList.remove('wrong-syl');
+      document.querySelectorAll('.syl-opt-btn').forEach(b => b.disabled = false);
+    }, 900);
+    showFeedbackSheet(false, `La sílaba correcta era: ${correct}`);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: INICIALES
+// ══════════════════════════════════════════════
+function renderIniciales() {
+  const item    = poolPick(`iniciales_${S.lang}`, INICIALES[S.lang]);
+  const correct = item.letter;
+  const others  = shuffle('ABCDEFGHIJKLMNOPRSTUVZ'.split('').filter(l => l !== correct)).slice(0, 3);
+  const opts    = shuffle([correct, ...others]);
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('ini_prompt')}</p>
+    <div class="iniciales-wrap">
+      <div class="ini-subject">
+        <div class="ini-emoji" onclick="speak('${item.name}')">${item.emoji}</div>
+        <div class="ini-name">${item.name}</div>
+      </div>
+      <div class="ini-letters">
+        ${opts.map(l =>
+          `<button class="ini-opt" id="io-${l}"
+             onclick="checkIni('${l}','${correct}','${item.name}')">${l}</button>`
+        ).join('')}
+      </div>
+    </div>`;
+  setTimeout(() => speak(item.name), 400);
+}
+
+function checkIni(chosen, correct, name) {
+  document.querySelectorAll('.ini-opt').forEach(b => b.disabled = true);
+  recordPerf(`ini:${name}`, chosen === correct);
+  if (chosen === correct) {
+    $(`io-${chosen}`).classList.add('correct');
+    speak(name);
+    showFeedbackSheet(true, name);
+  } else {
+    $(`io-${chosen}`).classList.add('wrong');
+    if ($(`io-${correct}`)) $(`io-${correct}`).classList.add('correct');
+    speak(name);
+    showFeedbackSheet(false, `Empieza con: ${correct}`);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: COMPLETA
+// ══════════════════════════════════════════════
+function renderCompleta() {
+  const item    = poolPick(`completa_${S.lang}`, WORDS[S.lang]);
+  const {emoji, word, blank} = item;
+  const correct = word[blank];
+  const vowels  = 'AEIOU'.split('');
+  const cons    = 'BCDFGHJKLMNPRSTV'.split('');
+  const pool    = correct.match(/[AEIOU]/) ? vowels : cons;
+  const opts    = shuffle([correct, ...shuffle(pool.filter(l => l !== correct)).slice(0, 3)]);
+
+  const tiles = word.split('').map((l, i) =>
+    i === blank
+      ? `<div class="tile blank" id="blank-tile">?</div>`
+      : `<div class="tile">${l}</div>`
+  ).join('');
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('compl_prompt')}</p>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:24px">
+      <div class="word-display-row">
+        <div style="font-size:4rem;cursor:pointer" onclick="speak('${word}')">${emoji}</div>
+        ${tiles}
+      </div>
+      <div class="opts-grid">
+        ${opts.map(l =>
+          `<button class="opt-btn" id="ch-${l}" onclick="checkCompleta('${l}','${correct}','${word}')">
+             <span class="opt-text" style="font-size:2rem;font-weight:900;">${l}</span>
+           </button>`
+        ).join('')}
+      </div>
+    </div>`;
+  setTimeout(() => speak(word), 400);
+}
+
+function checkCompleta(chosen, correct, word) {
+  document.querySelectorAll('.opt-btn').forEach(b => b.disabled = true);
+  const bt = $('blank-tile');
+  bt.textContent = chosen;
+  recordPerf(`comp:${word}`, chosen === correct);
+  if (chosen === correct) {
+    bt.classList.add('correct');
+    $(`ch-${chosen}`).classList.add('state-correct');
+    speak(word);
+    showFeedbackSheet(true, word);
+  } else {
+    bt.classList.add('wrong');
+    $(`ch-${chosen}`).classList.add('state-wrong');
+    if ($(`ch-${correct}`)) $(`ch-${correct}`).classList.add('state-reveal');
+    setTimeout(() => {
+      bt.textContent = '?'; bt.classList.remove('wrong');
+      document.querySelectorAll('.opt-btn').forEach(b => b.disabled = false);
+    }, 900);
+    showFeedbackSheet(false, `La letra correcta era: ${correct}`);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: LEER PALABRAS
+// ══════════════════════════════════════════════
+function syllabifyWord(word) {
+  const match = SILABAS_WORDS[S.lang].find(w => w.word.normalize('NFD').replace(/[\u0300-\u036f]/g,'') === word || w.word === word);
+  if (match) {
+    return match.syls.map(s => `<span class="syl-part">${s}</span>`).join('<span class="syl-sep">·</span>');
+  }
+  return word.split('').map(l => 'AEIOUÁÉÍÓÚ'.includes(l) ? `<span class="syl-vowel-highlight">${l}</span>` : l).join('');
+}
+
+function renderPalabras() {
+  const setKey = window._activeWordSet || 'default';
+  const wordPool = PALABRAS_SETS[setKey] || PALABRAS_SETS.default;
+  const item     = poolPick(`palabras_${setKey}`, wordPool);
+  const allEmojis = wordPool.map(p => p.emoji);
+  const extraDist = shuffle(allEmojis.filter(e => e !== item.emoji)).slice(0, 3);
+  const opts = shuffle([item.emoji, ...extraDist]);
+  const colors = ['#7c3aed','#f43f5e','#22c55e','#f59e0b'];
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('palabras_prompt')}</p>
+    <div class="palabras-wrap">
+      <div class="palabra-display" onclick="speak('${item.word}')">
+        <div class="palabra-text">${syllabifyWord(item.word)}</div>
+        <div class="palabra-hint">🔊 Toca para escuchar</div>
+      </div>
+      <div class="palabras-opts">
+        ${opts.map((emoji, i) =>
+          `<button class="palabra-opt" id="po-${i}"
+             style="border-color:${colors[i%colors.length]}22"
+             onclick="checkPalabra('${emoji}','${item.emoji}','${item.word}',${i})">
+             <span class="po-emoji">${emoji}</span>
+           </button>`
+        ).join('')}
+      </div>
+    </div>`;
+  setTimeout(() => speak(item.word), 500);
+}
+
+function checkPalabra(chosen, correct, word, idx) {
+  document.querySelectorAll('.palabra-opt').forEach(b => b.disabled = true);
+  const btn = $(`po-${idx}`);
+  recordPerf(`pal:${word}`, chosen === correct);
+  if (chosen === correct) {
+    btn.classList.add('opt-correct');
+    speak(word);
+    showFeedbackSheet(true, `¡Correcto! ${word} → ${correct}`);
+  } else {
+    btn.classList.add('opt-wrong');
+    document.querySelectorAll('.palabra-opt').forEach(b => {
+      const em = b.querySelector('.po-emoji');
+      if (em && em.textContent === correct) b.classList.add('opt-correct');
+    });
+    speak(word);
+    showFeedbackSheet(false, `La imagen correcta era: ${correct}`);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  GAME: LEE FRASES (lectura comprensiva)
+// ══════════════════════════════════════════════
+function renderFrases() {
+  const pool = FRASES[S.lang] || FRASES.es;
+  const item = poolPick(`frases_${S.lang}`, pool);
+  const opts = shuffle([item.emoji, ...shuffle([...item.distractors]).slice(0, 3)]);
+  const colors = ['#7c3aed','#f43f5e','#22c55e','#f59e0b'];
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('frase_prompt')}</p>
+    <div class="palabras-wrap">
+      <div class="palabra-display" onclick="speak('${item.text}')">
+        <div class="palabra-text frase-text">${item.text}</div>
+        <div class="palabra-hint">🔊 Toca para escuchar</div>
+      </div>
+      <div class="palabras-opts">
+        ${opts.map((emoji, i) =>
+          `<button class="palabra-opt" id="pf-${i}"
+             style="border-color:${colors[i%colors.length]}22"
+             onclick="checkFrase('${emoji}','${item.emoji}',${i})">
+             <span class="po-emoji">${emoji}</span>
+           </button>`
+        ).join('')}
+      </div>
+    </div>`;
+  window._activeFraseText = item.text;
+  setTimeout(() => speak(item.text), 500);
+}
+
+function checkFrase(chosen, correct, idx) {
+  document.querySelectorAll('.palabra-opt').forEach(b => b.disabled = true);
+  const btn = $(`pf-${idx}`);
+  const ok  = chosen === correct;
+  const text = window._activeFraseText || '';
+  if (ok) {
+    btn.classList.add('opt-correct');
+    showFeedbackSheet(true, '¡Muy bien leído! 📖');
+  } else {
+    btn.classList.add('opt-wrong');
+    document.querySelectorAll('.palabra-opt').forEach(b => {
+      const em = b.querySelector('.po-emoji');
+      if (em && em.textContent === correct) b.classList.add('opt-correct');
+    });
+    showFeedbackSheet(false, 'Vamos a leerla otra vez:');
+  }
+  recordPerf(`frase:${text}`, ok);
+  speak(text);
+}
+
+// ══════════════════════════════════════════════
+//  GAME: REPASO INFINITO (mezcla ponderada de todo)
+// ══════════════════════════════════════════════
+function unlockedConsList() {
+  const list = LESSONS.filter(l => l.cons && S.unlocked.includes(l.id)).map(l => l.cons);
+  return list.length ? list : ['M'];
+}
+function weakConsList() {
+  return unlockedConsList().filter(c => {
+    const items = SILABARIO_DATA[c] || [];
+    return items.some(it => {
+      const p = S.perf[`sil:${c}:${it.syl}`];
+      return p && p.w > p.r;
+    });
+  });
+}
+function unlockedWordSets() {
+  const sets = LESSONS.filter(l => l.wordSet && S.unlocked.includes(l.id)).map(l => l.wordSet);
+  return sets.length ? sets : ['default'];
+}
+let _lastRepasoGame = null;
+let _lastRepasoCons = null;
+function renderRepaso() {
+  let games = ['silabario','palabras','silabas','silabafalta','iniciales','completa'];
+  if ((FRASES[S.lang] || []).length && S.unlocked.includes('frases_1')) games.push('frases');
+  if (games.length > 1 && _lastRepasoGame) games = games.filter(g => g !== _lastRepasoGame);
+  const game = rand(games);
+  _lastRepasoGame = game;
+
+  if (game === 'silabario') {
+    const weak = weakConsList();
+    let pool = weak.length && Math.random() < 0.5 ? weak : unlockedConsList();
+    // Evita mostrar la misma familia dos veces seguidas si hay otras opciones
+    if (pool.length > 1 && _lastRepasoCons) {
+      const filtered = pool.filter(c => c !== _lastRepasoCons);
+      if (filtered.length) pool = filtered;
+    }
+    window._activeCons = rand(pool);
+    _lastRepasoCons = window._activeCons;
+  }
+  if (game === 'palabras') {
+    window._activeWordSet = rand(unlockedWordSets());
+  }
+  updateGameProgress();
+  const body = $('game-body');
+  const banner = `<div class="repaso-banner">${t('repaso_prompt')}</div>`;
+  renderGame(game);
+  if (body) body.insertAdjacentHTML('afterbegin', banner);
+}
+
+// ══════════════════════════════════════════════
+//  GAME: TRACING
+// ══════════════════════════════════════════════
+function renderTracing() {
+  const letters = ALPHABET.map(l => `
+    <button class="l-btn ${l===tracingCurrent?'sel':''} ${S.traced.includes(l)?'done':''}"
+      id="lb-${l}" onclick="selectTraceLetter('${l}')">${l}</button>`
+  ).join('');
+
+  $('game-body').innerHTML = `
+    <p class="game-prompt">${t('trace_prompt')}</p>
+    <div class="tracing-wrap">
+      <div class="letter-scroll">${letters}</div>
+      <div class="canvas-wrap">
+        <canvas id="trace-canvas" width="260" height="260"></canvas>
+        <div class="trace-ghost">${tracingCurrent}</div>
+      </div>
+      <div class="trace-btns">
+        <button class="btn-action btn-clear" onclick="clearTrace()">${t('clear_btn')}</button>
+        <button class="btn-action btn-submit" onclick="submitTrace()">${t('done_btn')}</button>
+      </div>
+    </div>`;
+  initTraceCanvas();
+  speak(tracingCurrent);
+}
+
+function selectTraceLetter(l) {
+  tracingCurrent = l; traceHasStroke = false; renderTracing();
+}
+function initTraceCanvas() {
+  const c = $('trace-canvas'); if (!c) return;
+  traceCtx = c.getContext('2d');
+  traceCtx.strokeStyle = '#a78bfa'; traceCtx.lineWidth = 14;
+  traceCtx.lineCap = 'round'; traceCtx.lineJoin = 'round';
+  const pos = e => { const r = c.getBoundingClientRect(), s = e.touches ? e.touches[0] : e; return {x: s.clientX-r.left, y: s.clientY-r.top}; };
+  const down = e => { e.preventDefault(); traceDrawing = true; const p = pos(e); traceCtx.beginPath(); traceCtx.moveTo(p.x, p.y); };
+  const move = e => { e.preventDefault(); if (!traceDrawing) return; const p = pos(e); traceCtx.lineTo(p.x, p.y); traceCtx.stroke(); traceHasStroke = true; };
+  const up   = () => { traceDrawing = false; };
+  c.addEventListener('mousedown', down); c.addEventListener('mousemove', move); c.addEventListener('mouseup', up);
+  c.addEventListener('touchstart', down, {passive:false}); c.addEventListener('touchmove', move, {passive:false}); c.addEventListener('touchend', up);
+}
+function clearTrace() { if (traceCtx) { traceCtx.clearRect(0,0,260,260); traceHasStroke = false; } }
+function submitTrace() {
+  if (!traceHasStroke) { return; }
+  const isNew = !S.traced.includes(tracingCurrent);
+  if (isNew) { S.traced.push(tracingCurrent); save(); }
+  speak(tracingCurrent);
+  showFeedbackSheet(true, `Letra ${tracingCurrent} trazada`);
+}
+
+// ══════════════════════════════════════════════
+//  VOWEL CLASS
+// ══════════════════════════════════════════════
+function vowelClass(syl) {
+  const v = ['A','E','I','O','U'].find(vw => syl.toUpperCase().includes(vw)) || 'A';
+  return 'vow-' + v.toLowerCase();
+}
+
+// ══════════════════════════════════════════════
+//  TROPHIES
+// ══════════════════════════════════════════════
+function goToTrophies() {
+  showScreen('screen-trophies');
+  checkBadges();
+  $('t-xp').textContent     = S.xp;
+  $('t-streak').textContent = S.streak;
+  $('t-games').textContent  = S.games;
+  $('badges-full-grid').innerHTML = BADGES.map(b => {
+    const earned = S.badges.includes(b.id);
+    return `<div class="badge-full ${earned?'earned':'locked'}">
+      <div class="bf-emoji">${earned ? b.emoji : '🔒'}</div>
+      <div class="bf-name">${b.name[S.lang]}</div>
+      <div class="bf-desc">${b.desc[S.lang]}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════════════
+function goToProfile() {
+  showScreen('screen-profile');
+  $('profile-avatar-big').textContent = S.avatar;
+  $('profile-name-big').textContent   = S.name || 'Jugador';
+  $('ps-xp').textContent     = S.xp;
+  $('ps-streak').textContent = S.streak;
+  $('ps-games').textContent  = S.games;
+  // Highlight current avatar
+  document.querySelectorAll('.profile-avatars .av-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.av === S.avatar);
+  });
+  // Highlight current lang
+  $('lang-es-btn').classList.toggle('active', S.lang === 'es');
+  $('lang-en-btn').classList.toggle('active', S.lang === 'en');
+}
+
+function changeAvatar(btn, av) {
+  S.avatar = av; save();
+  document.querySelectorAll('.profile-avatars .av-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $('profile-avatar-big').textContent = av;
+  renderHomeHeader();
+}
+
+function setLang(lang) {
+  S.lang = lang; S._pools = {}; save();
+  $('lang-es-btn').classList.toggle('active', lang === 'es');
+  $('lang-en-btn').classList.toggle('active', lang === 'en');
+}
+
+function confirmReset() {
+  if (confirm('¿Seguro que quieres borrar todo el progreso?')) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// ══════════════════════════════════════════════
+//  CONFETTI
+// ══════════════════════════════════════════════
+function launchConfetti() {
+  const canvas = $('confetti-canvas'), ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const colors = ['#a78bfa','#f43f5e','#22c55e','#fbbf24','#3b82f6','#f97316','#06b6d4'];
+  const pieces = Array.from({length: 90}, () => ({
+    x: Math.random() * canvas.width, y: Math.random() * -200,
+    r: Math.random() * 9 + 4, d: Math.random() * 5 + 2,
+    color: rand(colors), tilt: Math.random() * 10 - 5, ang: 0, ts: (Math.random() * 0.1) + 0.05
+  }));
+  let fr = 0;
+  const draw = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      p.ang += p.ts; p.y += p.d; p.tilt = Math.sin(p.ang) * 12;
+      ctx.beginPath(); ctx.lineWidth = p.r; ctx.strokeStyle = p.color;
+      ctx.moveTo(p.x + p.tilt + p.r / 3, p.y);
+      ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r * 0.8); ctx.stroke();
+    });
+    if (++fr < 130) requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+  draw();
+}
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+async function init() {
+  // Preload voices
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => bestVoice();
+
+  // Refill hearts
+  refillHearts();
+
+  // Show onboarding or home
+  if (!S.name) {
+    showScreen('screen-onboarding');
+  } else {
+    goHome();
+  }
+}
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+init();
