@@ -1,27 +1,262 @@
-{
-  "name": "WonderKids",
-  "short_name": "WonderKids",
-  "description": "Aprende a leer y matemáticas jugando | Learn to read & do math while playing",
-  "start_url": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#1a0533",
-  "theme_color": "#1a0533",
-  "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "categories": ["education", "kids", "games"],
-  "lang": "es",
-  "scope": "/"
-}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="WonderKids"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#0f0c29"/>
+  <title>WonderKids 🌈 — Aprende a Leer</title>
+  <meta name="description" content="WonderKids: aprende a leer con el Método Nacho. Sílabas, palabras y letras para niños 3-6 años."/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="icon" href="icons/icon-192.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+  <!-- ── CONFETTI CANVAS ── -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- ── XP FLOAT CONTAINER ── -->
+  <div id="xp-float-pool"></div>
+
+  <!-- ══════════════════════════════════
+       ONBOARDING
+  ══════════════════════════════════ -->
+  <div id="screen-onboarding" class="screen onboarding-screen">
+    <div class="ob-inner">
+      <div class="ob-logo">🌈</div>
+      <h1 class="ob-title">WonderKids</h1>
+      <p class="ob-sub">¡La app para aprender a leer! 📖</p>
+
+      <div class="ob-avatars" id="ob-avatars">
+        <button class="av-btn active" data-av="🦄" onclick="selectAvatar(this,'🦄')">🦄</button>
+        <button class="av-btn" data-av="🐸" onclick="selectAvatar(this,'🐸')">🐸</button>
+        <button class="av-btn" data-av="🦊" onclick="selectAvatar(this,'🦊')">🦊</button>
+        <button class="av-btn" data-av="🐼" onclick="selectAvatar(this,'🐼')">🐼</button>
+        <button class="av-btn" data-av="🦁" onclick="selectAvatar(this,'🦁')">🦁</button>
+      </div>
+
+      <label class="ob-label">¿Cómo te llamas?</label>
+      <input class="ob-input" id="ob-name" type="text"
+        placeholder="Escribe tu nombre..." maxlength="20"
+        onkeydown="if(event.key==='Enter') startApp()"/>
+
+      <button class="ob-start-btn" onclick="startApp()">
+        ¡Empezar a aprender! 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       HOME — RUTA DE APRENDIZAJE
+  ══════════════════════════════════ -->
+  <div id="screen-home" class="screen">
+
+    <!-- Header -->
+    <div class="home-header">
+      <div class="hh-left">
+        <div class="hh-avatar" id="hh-avatar">🦄</div>
+        <div class="hh-info">
+          <div class="hh-name" id="hh-name">¡Hola!</div>
+          <div class="hh-streak">🔥 <span id="hh-streak">0</span> días</div>
+        </div>
+      </div>
+      <div class="hh-right">
+        <div class="hh-hearts" id="hh-hearts"></div>
+        <div class="hh-xp">
+          <div class="hh-xp-val">⚡<span id="hh-xp">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- XP Bar -->
+    <div class="xp-bar-wrap">
+      <div class="xp-bar-fill" id="xp-bar-fill" style="width:0%"></div>
+    </div>
+
+    <!-- Ruta de aprendizaje -->
+    <div class="learning-path" id="learning-path"></div>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+      <button class="bnav-btn active" onclick="goHome()">
+        <span class="bnav-icon">🏠</span>
+        <span class="bnav-label">Inicio</span>
+      </button>
+      <button class="bnav-btn" onclick="goToTrophies()">
+        <span class="bnav-icon">🏆</span>
+        <span class="bnav-label">Logros</span>
+      </button>
+      <button class="bnav-btn" onclick="goToProfile()">
+        <span class="bnav-icon">👤</span>
+        <span class="bnav-label">Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ══════════════════════════════════
+       GAME SCREEN
+  ══════════════════════════════════ -->
+  <div id="screen-game" class="screen">
+
+    <!-- Game Header -->
+    <div class="game-header">
+      <button class="gh-close" onclick="exitGame()" aria-label="Salir">✕</button>
+      <div class="gh-progress">
+        <div class="gh-prog-bar">
+          <div class="gh-prog-fill" id="gh-prog-fill"></div>
+          <div class="gh-prog-shimmer"></div>
+        </div>
+        <div class="gh-prog-label" id="gh-prog-label">1 / 5</div>
+      </div>
+      <div class="gh-hearts" id="gh-hearts"></div>
+    </div>
+
+    <!-- Game Body -->
+    <div class="game-body" id="game-body"></div>
+
+    <!-- Bottom Sheet Feedback -->
+    <div class="feedback-sheet" id="feedback-sheet">
+      <div class="fs-inner" id="fs-inner">
+        <div class="fs-icon" id="fs-icon">✅</div>
+        <div class="fs-content">
+          <div class="fs-title" id="fs-title">¡Correcto!</div>
+          <div class="fs-sub"   id="fs-sub"></div>
+        </div>
+        <button class="fs-btn" id="fs-btn">Siguiente →</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════
+       TROPHIES SCREEN
+  ══════════════════════════════════ -->
+  <div id="screen-trophies" class="screen">
+    <div class="subj-header">
+      <button class="back-btn" onclick="goHome()">‹</button>
+      <div class="subj-header-title">🏆 Mis Logros</div>
+      <div></div>
+    </div>
+    <div class="trophy-stats">
+      <div class="t-stat">
+        <div class="t-stat-val" id="t-xp">0</div>
+        <div class="t-stat-lbl">⚡ XP</div>
+      </div>
+      <div class="t-stat">
+        <div class="t-stat-val" id="t-streak">0</div>
+        <div class="t-stat-lbl">🔥 Racha</div>
+      </div>
+      <div class="t-stat">
+        <div class="t-stat-val" id="t-games">0</div>
+        <div class="t-stat-lbl">🎮 Juegos</div>
+      </div>
+    </div>
+    <div class="badges-full-grid" id="badges-full-grid"></div>
+    <nav class="bottom-nav">
+      <button class="bnav-btn" onclick="goHome()">
+        <span class="bnav-icon">🏠</span>
+        <span class="bnav-label">Inicio</span>
+      </button>
+      <button class="bnav-btn active" onclick="goToTrophies()">
+        <span class="bnav-icon">🏆</span>
+        <span class="bnav-label">Logros</span>
+      </button>
+      <button class="bnav-btn" onclick="goToProfile()">
+        <span class="bnav-icon">👤</span>
+        <span class="bnav-label">Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ══════════════════════════════════
+       PROFILE SCREEN
+  ══════════════════════════════════ -->
+  <div id="screen-profile" class="screen">
+    <div class="subj-header">
+      <button class="back-btn" onclick="goHome()">‹</button>
+      <div class="subj-header-title">👤 Mi Perfil</div>
+      <div></div>
+    </div>
+    <div class="profile-body">
+      <div class="profile-avatar-big" id="profile-avatar-big">🦄</div>
+      <div class="profile-name-big" id="profile-name-big">Jugador</div>
+      <div class="profile-stats-row">
+        <div class="ps-item"><span class="ps-val" id="ps-xp">0</span><span class="ps-lbl">⚡ XP</span></div>
+        <div class="ps-item"><span class="ps-val" id="ps-streak">0</span><span class="ps-lbl">🔥 Racha</span></div>
+        <div class="ps-item"><span class="ps-val" id="ps-games">0</span><span class="ps-lbl">🎮 Juegos</span></div>
+      </div>
+      <div class="profile-section-title">Cambia tu avatar</div>
+      <div class="profile-avatars">
+        <button class="av-btn" data-av="🦄" onclick="changeAvatar(this,'🦄')">🦄</button>
+        <button class="av-btn" data-av="🐸" onclick="changeAvatar(this,'🐸')">🐸</button>
+        <button class="av-btn" data-av="🦊" onclick="changeAvatar(this,'🦊')">🦊</button>
+        <button class="av-btn" data-av="🐼" onclick="changeAvatar(this,'🐼')">🐼</button>
+        <button class="av-btn" data-av="🦁" onclick="changeAvatar(this,'🦁')">🦁</button>
+      </div>
+      <div class="profile-section-title">Idioma</div>
+      <div class="lang-toggle-wrap">
+        <button class="lang-toggle-btn" id="lang-es-btn" onclick="setLang('es')">🇪🇸 Español</button>
+        <button class="lang-toggle-btn" id="lang-en-btn" onclick="setLang('en')">🇺🇸 English</button>
+      </div>
+      <button class="reset-btn" onclick="confirmReset()">🗑️ Reiniciar progreso</button>
+    </div>
+    <nav class="bottom-nav">
+      <button class="bnav-btn" onclick="goHome()">
+        <span class="bnav-icon">🏠</span>
+        <span class="bnav-label">Inicio</span>
+      </button>
+      <button class="bnav-btn" onclick="goToTrophies()">
+        <span class="bnav-icon">🏆</span>
+        <span class="bnav-label">Logros</span>
+      </button>
+      <button class="bnav-btn active" onclick="goToProfile()">
+        <span class="bnav-icon">👤</span>
+        <span class="bnav-label">Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ══════════════════════════════════
+       LESSON COMPLETE OVERLAY
+  ══════════════════════════════════ -->
+  <div id="lesson-complete" class="lesson-complete-overlay">
+    <div class="lc-card">
+      <div class="lc-trophy">🏆</div>
+      <div class="lc-title">¡Lección Completa!</div>
+      <div class="lc-stats">
+        <div class="lc-stat"><div class="lc-sv" id="lc-xp">+50</div><div class="lc-sl">⚡ XP</div></div>
+        <div class="lc-stat"><div class="lc-sv" id="lc-acc">100%</div><div class="lc-sl">✅ Aciertos</div></div>
+        <div class="lc-stat"><div class="lc-sv" id="lc-hearts">❤️❤️❤️</div><div class="lc-sl">Vidas</div></div>
+      </div>
+      <button class="lc-btn" onclick="closeLessonComplete()">¡Continuar! 🚀</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       DIPLOMA OVERLAY (fin del método completo)
+  ══════════════════════════════════ -->
+  <div id="diploma-overlay" class="diploma-overlay">
+    <div class="dip-card">
+      <div class="dip-medal">🏅</div>
+      <div class="dip-title">¡Diploma de Lectura!</div>
+      <div class="dip-name" id="dip-name">Jugador</div>
+      <div class="dip-sub">Completaste todo el Método Nacho 🎉</div>
+      <div class="lc-stats">
+        <div class="lc-stat"><div class="lc-sv" id="dip-xp">0</div><div class="lc-sl">⚡ XP Total</div></div>
+        <div class="lc-stat"><div class="lc-sv" id="dip-games">0</div><div class="lc-sl">🎮 Lecciones</div></div>
+      </div>
+      <div class="dip-next">🎓 Desbloqueaste el <strong>Repaso Infinito</strong>: sigue practicando todo lo aprendido sin límite.</div>
+      <button class="lc-btn" onclick="closeDiploma()">¡Sigo practicando! 🚀</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
