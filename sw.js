@@ -1,10 +1,10 @@
 const CACHE_NAME = 'wonderkids-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/app.js',
-  '/manifest.json',
+  './',
+  './index.html',
+  './styles.css',
+  './app.js',
+  './manifest.json',
 ];
 
 self.addEventListener('install', e => {
