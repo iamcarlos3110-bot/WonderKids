@@ -2,7 +2,7 @@
   "name": "WonderKids",
   "short_name": "WonderKids",
   "description": "Aprende a leer y matemáticas jugando | Learn to read & do math while playing",
-  "start_url": "./",
+  "start_url": ".",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1a0533",
@@ -23,5 +23,5 @@
   ],
   "categories": ["education", "kids", "games"],
   "lang": "es",
-  "scope": "./"
+  "scope": "."
 }
