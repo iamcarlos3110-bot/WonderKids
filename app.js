@@ -572,6 +572,13 @@ function checkBadges() {
 // ══════════════════════════════════════════════
 async function speakEL(text, opts = {}) {
   if (!EL_API_KEY) { speakFallback(text); return; }
+  
+  // Prevent ElevenLabs from spelling out all-caps syllables/words (e.g., "MU" -> "M-U")
+  let speechText = text;
+  if (text === text.toUpperCase() && text.length <= 15) {
+    speechText = text.toLowerCase() + ".";
+  }
+
   const key = `${text}|${opts.speed||0.78}`;
   if (audioCache.has(key)) { playBuf(audioCache.get(key)); return; }
   try {
@@ -579,7 +586,7 @@ async function speakEL(text, opts = {}) {
       method:'POST',
       headers:{'xi-api-key':EL_API_KEY,'Content-Type':'application/json','Accept':'audio/mpeg'},
       body: JSON.stringify({
-        text, model_id:'eleven_multilingual_v2',
+        text: speechText, model_id:'eleven_multilingual_v2',
         voice_settings:{ stability:opts.stability||0.75, similarity_boost:0.85,
                           style:0.3, use_speaker_boost:true, speed:opts.speed||0.78 }
       })
