@@ -777,6 +777,10 @@ function bestVoice() {
 function speakFallback(txt) {
   try {
     speechSynthesis.cancel();
+    // Una sola letra en mayúscula suele hacer que la voz la deletree
+    // ("M mayúscula") en vez de decir su sonido. En minúscula, casi todas
+    // las voces la pronuncian de forma natural.
+    if (txt && txt.length === 1) txt = txt.toLowerCase();
     const u = new SpeechSynthesisUtterance(txt);
     u.lang = S.lang === 'es' ? 'es-ES' : 'en-US';
     u.rate = 0.78; u.pitch = 1.1; u.volume = 0.9;
@@ -790,10 +794,12 @@ const speak = txt => speakFallback(txt);
 
 function speakPhonics(syl, cons) {
   speechSynthesis.cancel();
-  if (cons === 'V') { speakFallback(syl); return; }
+  if (cons === 'V') { speakFallback(syl.toLowerCase()); return; }
   const vowel = syl.slice(-1);
-  speakFallback(cons);
-  setTimeout(() => speakFallback(vowel), 700);
+  // En minúscula: muchas voces del navegador, al recibir UNA sola letra en
+  // mayúscula, la deletrean como "M mayúscula" en vez de decir el sonido.
+  speakFallback(cons.toLowerCase());
+  setTimeout(() => speakFallback(vowel.toLowerCase()), 700);
   setTimeout(() => speakFallback(syl),   1400);
 }
 
@@ -1562,7 +1568,7 @@ function renderTracing() {
       </div>
     </div>`;
   initTraceCanvas();
-  speak(tracingCurrent);
+  speak(tracingCurrent.toLowerCase());
 }
 
 function selectTraceLetter(l) {
@@ -1585,7 +1591,7 @@ function submitTrace() {
   if (!traceHasStroke) { return; }
   const isNew = !S.traced.includes(tracingCurrent);
   if (isNew) { S.traced.push(tracingCurrent); save(); }
-  speak(tracingCurrent);
+  speak(tracingCurrent.toLowerCase());
   showFeedbackSheet(true, `Letra ${tracingCurrent} trazada`);
 }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wonderkids-v6';
+const CACHE_NAME = 'wonderkids-v7';
 const ASSETS = [
   './',
   './index.html',
