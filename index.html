@@ -34,13 +34,8 @@
       <h1 class="ob-title">WonderKids</h1>
       <p class="ob-sub">¡La app para aprender a leer! 📖</p>
 
-      <div class="ob-avatars" id="ob-avatars">
-        <button class="av-btn active" data-av="🦄" onclick="selectAvatar(this,'🦄')">🦄</button>
-        <button class="av-btn" data-av="🐸" onclick="selectAvatar(this,'🐸')">🐸</button>
-        <button class="av-btn" data-av="🦊" onclick="selectAvatar(this,'🦊')">🦊</button>
-        <button class="av-btn" data-av="🐼" onclick="selectAvatar(this,'🐼')">🐼</button>
-        <button class="av-btn" data-av="🦁" onclick="selectAvatar(this,'🦁')">🦁</button>
-      </div>
+      <div id="ob-avatar-preview" class="avatar-preview-wrap" data-size="110"></div>
+      <div id="ob-picker"></div>
 
       <label class="ob-label">¿Cómo te llamas?</label>
       <input class="ob-input" id="ob-name" type="text"
@@ -61,7 +56,7 @@
     <!-- Header -->
     <div class="home-header">
       <div class="hh-left">
-        <div class="hh-avatar" id="hh-avatar">🦄</div>
+        <div class="hh-avatar" id="hh-avatar"></div>
         <div class="hh-info">
           <div class="hh-name" id="hh-name">¡Hola!</div>
           <div class="hh-streak">🔥 <span id="hh-streak">0</span> días</div>
@@ -124,6 +119,7 @@
     <!-- Bottom Sheet Feedback -->
     <div class="feedback-sheet" id="feedback-sheet">
       <div class="fs-inner" id="fs-inner">
+        <div id="mascot-pop"></div>
         <div class="fs-icon" id="fs-icon">✅</div>
         <div class="fs-content">
           <div class="fs-title" id="fs-title">¡Correcto!</div>
@@ -185,21 +181,15 @@
       <div></div>
     </div>
     <div class="profile-body">
-      <div class="profile-avatar-big" id="profile-avatar-big">🦄</div>
+      <div id="profile-avatar-preview" class="avatar-preview-wrap" data-size="130"></div>
       <div class="profile-name-big" id="profile-name-big">Jugador</div>
       <div class="profile-stats-row">
         <div class="ps-item"><span class="ps-val" id="ps-xp">0</span><span class="ps-lbl">⚡ XP</span></div>
         <div class="ps-item"><span class="ps-val" id="ps-streak">0</span><span class="ps-lbl">🔥 Racha</span></div>
         <div class="ps-item"><span class="ps-val" id="ps-games">0</span><span class="ps-lbl">🎮 Juegos</span></div>
       </div>
-      <div class="profile-section-title">Cambia tu avatar</div>
-      <div class="profile-avatars">
-        <button class="av-btn" data-av="🦄" onclick="changeAvatar(this,'🦄')">🦄</button>
-        <button class="av-btn" data-av="🐸" onclick="changeAvatar(this,'🐸')">🐸</button>
-        <button class="av-btn" data-av="🦊" onclick="changeAvatar(this,'🦊')">🦊</button>
-        <button class="av-btn" data-av="🐼" onclick="changeAvatar(this,'🐼')">🐼</button>
-        <button class="av-btn" data-av="🦁" onclick="changeAvatar(this,'🦁')">🦁</button>
-      </div>
+      <div class="profile-section-title">Personaliza tu avatar</div>
+      <div id="profile-picker"></div>
       <div class="profile-section-title">Idioma</div>
       <div class="lang-toggle-wrap">
         <button class="lang-toggle-btn" id="lang-es-btn" onclick="setLang('es')">🇪🇸 Español</button>

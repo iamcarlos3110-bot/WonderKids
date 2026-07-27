@@ -609,8 +609,82 @@ button { cursor: pointer; font-family: 'Nunito', sans-serif; }
 .dip-next strong { color: var(--yellow-l); }
 
 /* ══════════════════════════════════════════════
-   TROPHIES / PROFILE
+   BLOCK AVATAR — personaje 3D de bloques (propio, sin marcas de terceros)
    ══════════════════════════════════════════════ */
+.avatar-scene {
+  perspective: 700px;
+  display: flex; align-items: center; justify-content: center;
+}
+.avatar-figure {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: spin-avatar 7s linear infinite;
+}
+.avatar-figure.no-spin { animation: none; }
+@keyframes spin-avatar { from { transform: rotateY(-20deg); } to { transform: rotateY(340deg); } }
+.ba-cube {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.ba-face {
+  position: absolute; top: 0; left: 0;
+  border: 1px solid rgba(0,0,0,0.12);
+  box-sizing: border-box;
+}
+.ba-face.f-right, .ba-face.f-left, .ba-face.f-back { filter: brightness(0.72); }
+.ba-face.f-top    { filter: brightness(1.22); }
+.ba-face.f-front  { filter: brightness(1); }
+.ba-face.f-bottom { filter: brightness(0.6); }
+
+.avatar-picker-row {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 6px;
+}
+.avatar-preview-wrap { display: flex; justify-content: center; margin: 4px 0 8px; }
+
+/* ══════════════════════════════════════════════
+   MASCOTA DE CELEBRACIÓN
+   ══════════════════════════════════════════════ */
+.mascot-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: 4px;
+}
+.mascot-svg {
+  width: 84px; height: 98px;
+  animation: mascot-bounce 0.7s cubic-bezier(0.34,1.56,0.64,1);
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.3));
+}
+@keyframes mascot-bounce {
+  0%   { transform: translateY(40px) scale(0.5) rotate(-8deg); opacity: 0; }
+  55%  { transform: translateY(-8px) scale(1.08) rotate(6deg); opacity: 1; }
+  75%  { transform: translateY(3px) scale(1) rotate(-3deg); }
+  100% { transform: translateY(0) scale(1) rotate(0deg); }
+}
+.mascot-bubble {
+  margin-top: 2px;
+  background: #fff; color: #1a1440;
+  font-size: 0.78rem; font-weight: 800;
+  padding: 5px 12px; border-radius: 14px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+  animation: mascot-bubble-in 0.3s ease 0.35s both;
+}
+@keyframes mascot-bubble-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.avatar-swatch {
+  width: 34px; height: 34px; border-radius: 10px;
+  border: 3px solid transparent; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.avatar-swatch:active { transform: scale(0.9); }
+.avatar-swatch.active { border-color: var(--text); transform: scale(1.12); }
+.avatar-picker-label {
+  font-size: 0.78rem; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin: 14px 0 6px; text-align: center;
+}
 .subj-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 18px 12px;

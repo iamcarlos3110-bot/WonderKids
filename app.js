@@ -32,6 +32,9 @@ const S = {
   unlocked: JSON.parse(localStorage.getItem('wk_unlocked') || '["vocales"]'),
   // Performance tracking per item, used to weight the infinite review mode
   perf: JSON.parse(localStorage.getItem('wk_perf') || '{}'),
+  // Avatar de bloques 3D (colores personalizables)
+  avatarParts: JSON.parse(localStorage.getItem('wk_avatarparts') ||
+    '{"skin":"#f5c99b","hair":"#2b1b0e","shirt":"#3b82f6","pants":"#1e293b"}'),
   // Hearts (5 max, refills over time)
   hearts:  Math.min(5, +localStorage.getItem('wk_hearts') ?? 5),
   heartsTime: +localStorage.getItem('wk_heartsTime') || 0,
@@ -58,6 +61,7 @@ const save = () => {
   localStorage.setItem('wk_hearts',    S.hearts);
   localStorage.setItem('wk_heartsTime',S.heartsTime);
   localStorage.setItem('wk_perf',      JSON.stringify(S.perf));
+  localStorage.setItem('wk_avatarparts', JSON.stringify(S.avatarParts));
 };
 
 // ══════════════════════════════════════════════
@@ -603,6 +607,150 @@ function checkBadges() {
 }
 
 // ══════════════════════════════════════════════
+//  MASCOTA DE CELEBRACIÓN — "Turbococo"
+//  Personaje 100% original (diseño y nombre propios), dibujado en SVG.
+//  No representa ni se basa en ningún personaje, marca o logo existente.
+// ══════════════════════════════════════════════
+const MASCOT_LINES = {
+  es: ['¡Turbo puntos! 🌟','¡Salto de coco! 🥥','¡Vamos con toda la piña! 🍍',
+       '¡Modo cohete activado! 🚀','¡Bailecito de victoria! 💃','¡Combo de campeón! 🏆'],
+  en: ['Turbo points! 🌟','Coconut jump! 🥥','Full pineapple mode! 🍍',
+       'Rocket mode on! 🚀','Victory wiggle! 💃','Champion combo! 🏆'],
+};
+
+function mascotSVG() {
+  return `
+  <svg viewBox="0 0 120 140" class="mascot-svg" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="30" cy="115" rx="10" ry="4" fill="#000" opacity="0.18"/>
+    <ellipse cx="88" cy="115" rx="10" ry="4" fill="#000" opacity="0.18"/>
+    <!-- capa -->
+    <path d="M42 42 L18 78 L48 68 Z" fill="#fbbf24"/>
+    <path d="M78 42 L102 78 L72 68 Z" fill="#fbbf24"/>
+    <!-- piernas -->
+    <rect x="42" y="90" width="9" height="26" rx="4" fill="#8b5a2b"/>
+    <rect x="69" y="90" width="9" height="26" rx="4" fill="#8b5a2b"/>
+    <!-- zapatillas (diseño propio, sin logos) -->
+    <path d="M28 108 q2 -10 14 -10 h6 v12 q0 6 -6 6 h-18 q-4 0 -4 -4 q0 -3 8 -4Z" fill="#22d3ee"/>
+    <path d="M84 108 q2 -10 14 -10 h6 v12 q0 6 -6 6 h-18 q-4 0 -4 -4 q0 -3 8 -4Z" fill="#22d3ee"/>
+    <rect x="30" y="104" width="18" height="3" rx="1.5" fill="#fff" opacity="0.85"/>
+    <rect x="86" y="104" width="18" height="3" rx="1.5" fill="#fff" opacity="0.85"/>
+    <!-- brazos en celebración -->
+    <path d="M40 68 Q18 55 12 34" stroke="#8b5a2b" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M80 68 Q102 55 108 34" stroke="#8b5a2b" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <circle cx="11" cy="30" r="7" fill="#8b5a2b"/>
+    <circle cx="109" cy="30" r="7" fill="#8b5a2b"/>
+    <!-- cuerpo tipo coco -->
+    <ellipse cx="60" cy="66" rx="34" ry="38" fill="#8b5a2b"/>
+    <ellipse cx="60" cy="48" rx="22" ry="16" fill="#a9764f"/>
+    <circle cx="38" cy="80" r="4" fill="#6b4423" opacity="0.6"/>
+    <circle cx="84" cy="86" r="3" fill="#6b4423" opacity="0.6"/>
+    <circle cx="70" cy="94" r="3.5" fill="#6b4423" opacity="0.6"/>
+    <!-- cara -->
+    <circle cx="46" cy="62" r="12" fill="#fff"/>
+    <circle cx="74" cy="62" r="12" fill="#fff"/>
+    <circle cx="48" cy="60" r="6" fill="#1a1a1a"/>
+    <circle cx="76" cy="60" r="6" fill="#1a1a1a"/>
+    <circle cx="50" cy="57" r="2" fill="#fff"/>
+    <circle cx="78" cy="57" r="2" fill="#fff"/>
+    <path d="M46 80 Q60 94 74 80" stroke="#1a1a1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <circle cx="36" cy="72" r="5" fill="#f4a89b" opacity="0.55"/>
+    <circle cx="84" cy="72" r="5" fill="#f4a89b" opacity="0.55"/>
+    <!-- estrellitas -->
+    <text x="6"  y="20" font-size="16">✨</text>
+    <text x="98" y="16" font-size="14">⭐</text>
+    <text x="6"  y="100" font-size="13">⭐</text>
+  </svg>`;
+}
+
+function popMascot() {
+  const el = $('mascot-pop');
+  if (!el) return;
+  const line = rand(MASCOT_LINES[S.lang] || MASCOT_LINES.es);
+  el.innerHTML = `
+    <div class="mascot-wrap">
+      ${mascotSVG()}
+      <div class="mascot-bubble">${line}</div>
+    </div>`;
+}
+function clearMascot() {
+  const el = $('mascot-pop');
+  if (el) el.innerHTML = '';
+}
+
+// ══════════════════════════════════════════════
+//  AVATAR DE BLOQUES 3D (diseño propio, con CSS 3D — sin usar
+//  ningún logo, personaje ni activo de terceros)
+// ══════════════════════════════════════════════
+const AVATAR_COLORS = {
+  skin:  ['#ffe0bd','#f5c99b','#e0ac69','#c68642','#8d5524','#5c3a21'],
+  hair:  ['#2b1b0e','#5a3825','#a0522d','#e8b923','#e63946','#7c3aed','#1a1a1a','#f4f4f4'],
+  shirt: ['#ef4444','#3b82f6','#22c55e','#f59e0b','#a78bfa','#ec4899','#06b6d4','#111827'],
+  pants: ['#1e293b','#374151','#075985','#4c1d95','#78350f','#111111'],
+};
+const AVATAR_LABELS = {skin:'Piel', hair:'Pelo', shirt:'Camiseta', pants:'Pantalón'};
+
+function baCube(w, h, d, color, tx, ty) {
+  const hw = w/2, hh = h/2, hd = d/2;
+  return `<div class="ba-cube" style="width:${w}px;height:${h}px;left:calc(50% - ${hw}px);top:calc(50% - ${hh}px);transform:translate3d(${tx||0}px,${ty||0}px,0px);">
+    <div class="ba-face f-front"  style="width:${w}px;height:${h}px;background:${color};transform:translateZ(${hd}px);"></div>
+    <div class="ba-face f-back"   style="width:${w}px;height:${h}px;background:${color};transform:rotateY(180deg) translateZ(${hd}px);"></div>
+    <div class="ba-face f-right"  style="width:${d}px;height:${h}px;background:${color};left:${hw-hd}px;transform:rotateY(90deg) translateZ(${hw}px);"></div>
+    <div class="ba-face f-left"   style="width:${d}px;height:${h}px;background:${color};left:${hw-hd}px;transform:rotateY(-90deg) translateZ(${hw}px);"></div>
+    <div class="ba-face f-top"    style="width:${w}px;height:${d}px;background:${color};top:${hh-hd}px;transform:rotateX(90deg) translateZ(${hh}px);"></div>
+    <div class="ba-face f-bottom" style="width:${w}px;height:${d}px;background:${color};top:${hh-hd}px;transform:rotateX(-90deg) translateZ(${hh}px);"></div>
+  </div>`;
+}
+
+function renderBlockAvatar(size, spin) {
+  size = size || 100;
+  const ap = S.avatarParts;
+  const s  = size / 140; // escala relativa a las proporciones base (~140px de alto)
+  const parts = [
+    baCube(40*s, 15*s, 40*s, ap.hair,  0,       -71*s), // pelo
+    baCube(36*s, 36*s, 36*s, ap.skin,  0,       -46*s), // cabeza
+    baCube(46*s, 52*s, 26*s, ap.shirt, 0,        -8*s), // torso
+    baCube(14*s, 46*s, 14*s, ap.skin, -32*s,     -8*s), // brazo izq
+    baCube(14*s, 46*s, 14*s, ap.skin,  32*s,     -8*s), // brazo der
+    baCube(17*s, 50*s, 17*s, ap.pants,-12*s,      44*s), // pierna izq
+    baCube(17*s, 50*s, 17*s, ap.pants, 12*s,      44*s), // pierna der
+  ].join('');
+  return `
+    <div class="avatar-scene" style="width:${size}px;height:${size}px;">
+      <div class="avatar-figure ${spin === false ? 'no-spin' : ''}" style="width:${size}px;height:${size}px;">
+        ${parts}
+      </div>
+    </div>`;
+}
+
+function renderAvatarPicker(prefix) {
+  return ['skin','hair','shirt','pants'].map(part => {
+    const swatches = AVATAR_COLORS[part].map(c =>
+      `<button class="avatar-swatch ${S.avatarParts[part] === c ? 'active' : ''}" style="background:${c}"
+         onclick="setAvatarPart('${part}','${c}','${prefix}')" aria-label="${AVATAR_LABELS[part]}"></button>`
+    ).join('');
+    return `<div class="avatar-picker-label">${AVATAR_LABELS[part]}</div>
+            <div class="avatar-picker-row">${swatches}</div>`;
+  }).join('');
+}
+
+function setAvatarPart(part, color, prefix) {
+  S.avatarParts[part] = color; save();
+  sfxTap();
+  const prev = $(prefix + '-avatar-preview');
+  if (prev) prev.innerHTML = renderBlockAvatar(prev.dataset.size ? +prev.dataset.size : 110, true);
+  const picker = $(prefix + '-picker');
+  if (picker) picker.innerHTML = renderAvatarPicker(prefix);
+  renderHomeHeader();
+}
+
+function renderOnboardingAvatar() {
+  const prev = $('ob-avatar-preview');
+  if (prev) prev.innerHTML = renderBlockAvatar(+prev.dataset.size || 110, true);
+  const picker = $('ob-picker');
+  if (picker) picker.innerHTML = renderAvatarPicker('ob');
+}
+
+// ══════════════════════════════════════════════
 //  VOICE SELECTION
 // ══════════════════════════════════════════════
 let _bestVoice = null;
@@ -650,6 +798,50 @@ function speakPhonics(syl, cons) {
 }
 
 // ══════════════════════════════════════════════
+//  EFECTOS DE SONIDO (Web Audio API)
+// ══════════════════════════════════════════════
+// Estos sonidos se generan directamente en el navegador con osciladores,
+// así que suenan siempre, sin depender de voces del sistema ni de conexión
+// a internet. Sirven además de respaldo si la voz (Web Speech API) no
+// está disponible en el dispositivo.
+let _audioCtx = null;
+function getAudioCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!_audioCtx) _audioCtx = new AC();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+function playTone(freq, dur, type, vol, delayMs) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0   = ctx.currentTime + (delayMs || 0) / 1000;
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(vol || 0.2, t0 + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.05);
+}
+function sfxTap()     { playTone(680, 0.06, 'sine', 0.12); }
+function sfxCorrect() { playTone(523.25,0.14,'sine',0.22,0); playTone(659.25,0.14,'sine',0.22,110); playTone(783.99,0.22,'sine',0.24,220); }
+function sfxWrong()   { playTone(220,0.22,'sawtooth',0.18,0); playTone(174.61,0.28,'sawtooth',0.15,120); }
+function sfxComplete(){ [523.25,659.25,783.99,1046.50].forEach((f,i) => playTone(f,0.22,'sine',0.22,i*140)); }
+
+// Muchos navegadores bloquean cualquier sonido (incluida la voz) hasta que
+// el usuario interactúa una vez con la página. Esto "desbloquea" el audio
+// en el primer toque, sea cual sea el botón que toque primero.
+function unlockAudioOnce() {
+  getAudioCtx();
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch(e){}
+}
+document.addEventListener('touchstart', unlockAudioOnce, {once:true});
+document.addEventListener('click',      unlockAudioOnce, {once:true});
+
+// ══════════════════════════════════════════════
 //  SCREENS
 // ══════════════════════════════════════════════
 function showScreen(id) {
@@ -660,19 +852,11 @@ function showScreen(id) {
 // ══════════════════════════════════════════════
 //  ONBOARDING
 // ══════════════════════════════════════════════
-let _selectedAvatar = '🦄';
-function selectAvatar(btn, av) {
-  _selectedAvatar = av;
-  document.querySelectorAll('#ob-avatars .av-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
 function startApp() {
   const nameInput = $('ob-name');
   const name = nameInput ? nameInput.value.trim() : '';
   if (!name) { nameInput && nameInput.focus(); return; }
   S.name   = name;
-  S.avatar = _selectedAvatar;
   save();
   goHome();
 }
@@ -695,7 +879,7 @@ function renderHomeHeader() {
   const av = $('hh-avatar');
   const nm = $('hh-name');
   const st = $('hh-streak');
-  if (av) av.textContent = S.avatar;
+  if (av) av.innerHTML = renderBlockAvatar(40, false);
   if (nm) nm.textContent = `¡Hola, ${S.name}! 👋`;
   if (st) st.textContent = S.streak;
 }
@@ -841,8 +1025,12 @@ function showFeedbackSheet(correct, subtitle, onNext) {
     // XP float at center screen
     addXP(xpGain, window.innerWidth / 2 - 30, window.innerHeight / 2);
     S.correctCount++;
+    sfxCorrect();
+    popMascot();
   } else {
     loseHeart();
+    sfxWrong();
+    clearMascot();
     if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
   }
 
@@ -987,6 +1175,7 @@ function renderSilabario() {
 function tapSylCard(syl, cons, quizSyl) {
   const card = $(`sc-${syl}`);
   if (card) { card.classList.add('tapped'); setTimeout(() => card.classList.remove('tapped'), 250); }
+  sfxTap();
   speakPhonics(syl, cons);
   recordPerf(`sil:${cons}:${quizSyl}`, syl === quizSyl);
   if (syl === quizSyl) {
@@ -1432,26 +1621,17 @@ function goToTrophies() {
 // ══════════════════════════════════════════════
 function goToProfile() {
   showScreen('screen-profile');
-  $('profile-avatar-big').textContent = S.avatar;
+  const prev = $('profile-avatar-preview');
+  if (prev) prev.innerHTML = renderBlockAvatar(+prev.dataset.size || 130, true);
+  const picker = $('profile-picker');
+  if (picker) picker.innerHTML = renderAvatarPicker('profile');
   $('profile-name-big').textContent   = S.name || 'Jugador';
   $('ps-xp').textContent     = S.xp;
   $('ps-streak').textContent = S.streak;
   $('ps-games').textContent  = S.games;
-  // Highlight current avatar
-  document.querySelectorAll('.profile-avatars .av-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.av === S.avatar);
-  });
   // Highlight current lang
   $('lang-es-btn').classList.toggle('active', S.lang === 'es');
   $('lang-en-btn').classList.toggle('active', S.lang === 'en');
-}
-
-function changeAvatar(btn, av) {
-  S.avatar = av; save();
-  document.querySelectorAll('.profile-avatars .av-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  $('profile-avatar-big').textContent = av;
-  renderHomeHeader();
 }
 
 function setLang(lang) {
@@ -1508,6 +1688,7 @@ async function init() {
   // Show onboarding or home
   if (!S.name) {
     showScreen('screen-onboarding');
+    renderOnboardingAvatar();
   } else {
     goHome();
   }
