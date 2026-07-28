@@ -758,6 +758,19 @@ button { cursor: pointer; font-family: 'Nunito', sans-serif; }
 }
 .mastery-pct { width: 40px; flex-shrink: 0; font-size: 0.78rem; font-weight: 800; color: var(--muted); text-align: right; }
 .mastery-empty { font-size: 0.85rem; color: var(--muted); font-weight: 600; text-align: center; padding: 6px 0 4px; }
+
+.voice-status {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 12px 14px; font-size: 0.82rem; font-weight: 700;
+}
+.voice-status .vs-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.voice-status.ok   .vs-dot { background: #22c55e; }
+.voice-status.warn .vs-dot { background: #fbbf24; }
+.voice-status-btn {
+  margin-left: auto; font-size: 0.76rem; font-weight: 800; color: var(--primary, #a78bfa);
+  background: none; border: none; cursor: pointer; text-decoration: underline;
+}
 .avatar-swatch {
   width: 34px; height: 34px; border-radius: 10px;
   border: 3px solid transparent; cursor: pointer;

@@ -937,15 +937,37 @@ function speakFallback(txt) {
 
 const speak = txt => speakFallback(txt);
 
+// Si el navegador no tiene ninguna voz en español, una voz en inglés lee
+// "MU" como "miu" (como la letra griega) en vez de "mu". Este mapa
+// "reescribe" el sonido usando ortografía que el inglés sí lee bien,
+// solo para el momento de enseñar la sílaba — no afecta a las palabras.
+const ES_VOWEL_RESPELL = {A:'ah', E:'eh', I:'ee', O:'oh', U:'oo'};
+function hasSpanishVoice() {
+  const v = bestVoice();
+  return !!(v && v.lang && v.lang.toLowerCase().startsWith('es'));
+}
+function respellForEnglishVoice(text) {
+  const upper = text.toUpperCase();
+  if (ES_VOWEL_RESPELL[upper]) return ES_VOWEL_RESPELL[upper];
+  const lastChar    = upper.slice(-1);
+  const vowelSound  = ES_VOWEL_RESPELL[lastChar];
+  if (vowelSound) return upper.slice(0, -1).toLowerCase() + vowelSound;
+  return text;
+}
+
 function speakPhonics(syl, cons) {
   speechSynthesis.cancel();
-  if (cons === 'V') { speakFallback(syl.toLowerCase()); return; }
+  const useRespell = S.lang === 'es' && !hasSpanishVoice();
+  if (cons === 'V') {
+    speakFallback(useRespell ? respellForEnglishVoice(syl) : syl.toLowerCase());
+    return;
+  }
   const vowel = syl.slice(-1);
   // En minúscula: muchas voces del navegador, al recibir UNA sola letra en
   // mayúscula, la deletrean como "M mayúscula" en vez de decir el sonido.
   speakFallback(cons.toLowerCase());
-  setTimeout(() => speakFallback(vowel.toLowerCase()), 700);
-  setTimeout(() => speakFallback(syl),   1400);
+  setTimeout(() => speakFallback(useRespell ? respellForEnglishVoice(vowel) : vowel.toLowerCase()), 700);
+  setTimeout(() => speakFallback(useRespell ? respellForEnglishVoice(syl)   : syl), 1400);
 }
 
 // ══════════════════════════════════════════════
@@ -1820,6 +1842,28 @@ function goToProfile() {
   // Highlight current lang
   $('lang-es-btn').classList.toggle('active', S.lang === 'es');
   $('lang-en-btn').classList.toggle('active', S.lang === 'en');
+  renderVoiceStatus();
+}
+
+function renderVoiceStatus() {
+  const el = $('voice-status');
+  if (!el) return;
+  const ok = hasSpanishVoice();
+  const showWarn = S.lang === 'es' && !ok;
+  el.className = `voice-status ${showWarn ? 'warn' : 'ok'}`;
+  const label = S.lang === 'es'
+    ? (ok ? 'Voz en español detectada' : 'No hay voz en español instalada')
+    : (ok ? 'Voice ready' : 'Voice ready (using fallback)');
+  el.innerHTML = `<span class="vs-dot"></span><span>${label}</span>
+    <button class="voice-status-btn" onclick="testVoice()">${S.lang === 'es' ? 'Probar' : 'Test'}</button>`;
+}
+function testVoice() {
+  speak(S.lang === 'es' ? 'Hola, así suena mi voz' : 'Hello, this is how I sound');
+  if (S.lang === 'es' && !hasSpanishVoice()) {
+    setTimeout(() => {
+      alert('Para tener una voz en español de verdad: ve a los ajustes de tu celular u ordenador, busca "Idioma y voz" o "Accesibilidad", añade una voz en Español, y vuelve a abrir el navegador. Mientras tanto, la app ajusta el texto para sonar lo mejor posible con la voz que tengas.');
+    }, 500);
+  }
 }
 
 function setLang(lang) {
