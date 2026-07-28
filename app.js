@@ -241,7 +241,7 @@ const LESSONS = [
     icon: '👨', title: 'PA · PE · PI · PO · PU', desc: 'La familia de la P', game: 'silabario', cons: 'P',
     xp: 25, diff: 'easy', unlocks: ['palabras_1'] },
   { id: 'palabras_1',
-    icon: '📝', title: 'Leer Palabras I', desc: 'MAMÁ, PAPÁ, PIPA, MAPA...', game: 'palabras', wordSet: 'set1',
+    icon: '📝', title: 'Leer Palabras I', desc: 'MAMÁ, PAPÁ, PIE, MAPA...', game: 'palabras', wordSet: 'set1',
     xp: 35, diff: 'easy', unlocks: ['sa_familia'] },
   // UNIDAD 4: Familia SA
   { unit: 4, unitTitle: '📚 Unidad 4 · Familia SA', id: 'sa_familia',
@@ -387,7 +387,7 @@ const SILABAS_WORDS = {
     {emoji:'🌮',word:'TACO',    syls:['TA','CO']},
     {emoji:'🍊',word:'NARANJA', syls:['NA','RAN','JA']},
     {emoji:'🐬',word:'DELFIN',  syls:['DEL','FIN']},
-    {emoji:'🎲',word:'DEDO',    syls:['DE','DO']},
+    {emoji:'👆',word:'DEDO',    syls:['DE','DO']},
     {emoji:'🦒',word:'JIRAFA',  syls:['JI','RA','FA']},
     {emoji:'🍩',word:'DONA',    syls:['DO','NA']},
     {emoji:'🧃',word:'JUGO',    syls:['JU','GO']},
@@ -413,7 +413,7 @@ const PALABRAS_SETS = {
   set1: [
     {word:'MAMÁ',   emoji:'👩',distractors:['🐱','🚀','🍌']},
     {word:'PAPÁ',   emoji:'👨',distractors:['🌙','🎈','🐸']},
-    {word:'PIPA',   emoji:'🎶',distractors:['🏠','🐘','🌺']},
+    {word:'PIE',    emoji:'🦶',distractors:['🏠','🐘','🌺']},
     {word:'MAPA',   emoji:'🗺️',distractors:['🦁','🐧','🍎']},
     {word:'PUMA',   emoji:'🐆',distractors:['🐸','🌙','🚀']},
   ],
@@ -471,7 +471,7 @@ const SILABARIO_DATA = {
   M:[
     {syl:'MA',emoji:'👩',word:'MAMÁ',  example:'MA de Mamá'},
     {syl:'ME',emoji:'🍯',word:'MIEL',  example:'ME de Miel'},
-    {syl:'MI',emoji:'🪄',word:'MIGA',  example:'MI de Miga'},
+    {syl:'MI',emoji:'🍞',word:'MIGA',  example:'MI de Miga'},
     {syl:'MO',emoji:'🐒',word:'MONO',  example:'MO de Mono'},
     {syl:'MU',emoji:'🧸',word:'MUÑECA',example:'MU de Muñeca'},
   ],
@@ -487,7 +487,7 @@ const SILABARIO_DATA = {
     {syl:'SE',emoji:'🌱',word:'SEMILLA',example:'SE de Semilla'},
     {syl:'SI',emoji:'🪑',word:'SILLA',  example:'SI de Silla'},
     {syl:'SO',emoji:'🍲',word:'SOPA',   example:'SO de Sopa'},
-    {syl:'SU',emoji:'🧃',word:'SUMO',   example:'SU de Sumo'},
+    {syl:'SU',emoji:'🍣',word:'SUSHI',  example:'SU de Sushi'},
   ],
   L:[
     {syl:'LA',emoji:'🦎',word:'LAGARTO',example:'LA de Lagarto'},
@@ -519,7 +519,7 @@ const SILABARIO_DATA = {
   ],
   R:[
     {syl:'RA',emoji:'🐸',word:'RANA',   example:'RA de Rana'},
-    {syl:'RE',emoji:'🎸',word:'REGALO', example:'RE de Regalo'},
+    {syl:'RE',emoji:'🎁',word:'REGALO', example:'RE de Regalo'},
     {syl:'RI',emoji:'😄',word:'RISA',   example:'RI de Risa'},
     {syl:'RO',emoji:'🌹',word:'ROSA',   example:'RO de Rosa'},
     {syl:'RU',emoji:'🛞',word:'RUEDA',  example:'RU de Rueda'},
