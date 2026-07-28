@@ -127,9 +127,10 @@ button { cursor: pointer; font-family: 'Nunito', sans-serif; }
   min-height: 100vh;
 }
 .ob-logo {
-  font-size: 5.5rem;
+  width: min(78vw, 320px);
+  height: auto;
   animation: float 3s ease-in-out infinite;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 @keyframes float {
   0%,100% { transform: translateY(0); }
