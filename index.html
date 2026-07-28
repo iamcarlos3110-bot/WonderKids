@@ -78,6 +78,9 @@
     <!-- Ruta de aprendizaje -->
     <div class="learning-path" id="learning-path"></div>
 
+    <!-- Botón flotante del tutor -->
+    <button class="tutor-fab" onclick="openTutor()" aria-label="Pregúntale a Turbococo">🥥</button>
+
     <!-- Bottom Nav -->
     <nav class="bottom-nav">
       <button class="bnav-btn active" onclick="goHome()">
@@ -154,6 +157,8 @@
         <div class="t-stat-lbl">🎮 Juegos</div>
       </div>
     </div>
+    <div class="profile-section-title" id="mastery-title" style="margin-top:20px;">Dominio por familia</div>
+    <div class="mastery-list" id="mastery-list"></div>
     <div class="badges-full-grid" id="badges-full-grid"></div>
     <nav class="bottom-nav">
       <button class="bnav-btn" onclick="goHome()">
@@ -226,6 +231,20 @@
         <div class="lc-stat"><div class="lc-sv" id="lc-hearts">❤️❤️❤️</div><div class="lc-sl">Vidas</div></div>
       </div>
       <button class="lc-btn" onclick="closeLessonComplete()">¡Continuar! 🚀</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       TUTOR — "Pregúntale a Turbococo"
+  ══════════════════════════════════ -->
+  <div id="tutor-overlay" class="tutor-overlay">
+    <div class="tutor-card">
+      <div class="tutor-header">
+        <div class="tutor-header-title">🥥 Turbococo</div>
+        <button class="tutor-close" onclick="closeTutor()">✕</button>
+      </div>
+      <div class="tutor-chat" id="tutor-chat"></div>
+      <div class="tutor-quick" id="tutor-quick"></div>
     </div>
   </div>
 

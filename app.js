@@ -81,6 +81,21 @@ function recordPerf(key, ok) {
   save();
 }
 
+// Calcula qué tan bien domina el niño una familia de sílabas (0 a 1),
+// usando todo el historial de aciertos/fallos registrado. Devuelve null
+// si todavía no hay datos suficientes.
+function familyMastery(cons) {
+  const items = SILABARIO_DATA[cons] || [];
+  let r = 0, w = 0;
+  items.forEach(it => {
+    const p = S.perf[`sil:${cons}:${it.syl}`];
+    if (p) { r += p.r; w += p.w; }
+  });
+  const total = r + w;
+  if (total < 2) return null; // muy pocos datos para fiarse todavía
+  return r / total;
+}
+
 // ══════════════════════════════════════════════
 //  ANTI-REPEAT POOL
 // ══════════════════════════════════════════════
@@ -678,6 +693,136 @@ function clearMascot() {
 }
 
 // ══════════════════════════════════════════════
+//  TUTOR — "Pregúntale a Turbococo"
+//  Panel de preguntas rápidas con respuestas ya escritas (no es una IA de
+//  verdad conectada a un servidor — así queda claro y honesto qué es).
+// ══════════════════════════════════════════════
+const TUTOR_JOKES = {
+  es: [
+    '¿Sabes por qué la M fue a la fiesta? ¡La invitaron con Mmmmucho cariño! 😄',
+    '¿Qué le dice una vocal a otra? ¡A-E-I-O-U, otra vez juntos! 🎉',
+    '¿Qué hace una P cuando tiene sueño? Se va a su pa-pa-cama 😴',
+    '¿Sabes qué sílaba es la más deportista? ¡La que siempre está co-rriendo! 🏃',
+    '¿Por qué el libro nunca se pierde? Porque siempre sabe dónde está pa-pa-rado 📖',
+  ],
+  en: [
+    'Why did the letter M go to the party? It got a very Mmmm-vitation! 😄',
+    'What do the vowels say to each other? A-E-I-O-U, see you again! 🎉',
+    'Why is the syllable "run" the sportiest? Because it never stops running! 🏃',
+  ],
+};
+const TUTOR_FACTS = {
+  es: [
+    'El abecedario en español tiene 27 letras — ¡la Ñ es solo nuestra! 🇪🇸',
+    'Leer un poquito cada día hace que tu cerebro se vuelva súper fuerte 💪',
+    'Cuando lees, tu cerebro imagina las cosas como si las vieras de verdad 🧠',
+    'Hace muchísimos años la gente escribía en piedra y en hojas de plantas 🪨',
+    'La letra E es una de las que más se usa en todo el español 📚',
+  ],
+  en: [
+    'The Spanish alphabet has 27 letters — the Ñ is unique to it! 🇪🇸',
+    'Reading a little every day makes your brain super strong 💪',
+    'When you read, your brain imagines things as if you were really seeing them 🧠',
+  ],
+};
+const TUTOR_ENCOURAGEMENT = {
+  es: [
+    '¡Tú puedes con esto! Cada vez que practicas, tu cerebro aprende un poquito más 🌟',
+    'Equivocarse también es aprender. ¡Sigue intentándolo! 💫',
+    'Hasta los lectores más grandes empezaron como tú, letra por letra 📖',
+    'Respira, tómate tu tiempo, y vuelve a intentarlo. ¡Confío en ti! 🥥',
+    '¡Cada sílaba que aprendes te acerca más a leer libros enteros! 🚀',
+  ],
+  en: [
+    'You can do this! Every time you practice, your brain learns a little more 🌟',
+    'Making mistakes is part of learning. Keep trying! 💫',
+    'Even great readers started just like you, letter by letter 📖',
+    'Take a breath, take your time, and try again. I believe in you! 🥥',
+  ],
+};
+
+function tutorLetterInfo(cons) {
+  const items = SILABARIO_DATA[cons];
+  if (!items || !items.length) {
+    return S.lang === 'es' ? 'Todavía no hemos aprendido esa letra.' : "We haven't learned that one yet.";
+  }
+  const syls = items.map(i => i.syl).join(' · ');
+  const ex = rand(items);
+  return S.lang === 'es'
+    ? `¡Suena así! ${syls}. Por ejemplo: ${ex.example} ${ex.emoji}`
+    : `It sounds like this! ${syls}. For example: ${ex.example} ${ex.emoji}`;
+}
+
+function tutorAddMsg(who, text) {
+  const chat = $('tutor-chat');
+  if (!chat) return;
+  const div = document.createElement('div');
+  div.className = `tutor-msg ${who}`;
+  div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function openTutor() {
+  sfxTap();
+  $('tutor-overlay').classList.add('show');
+  const chat = $('tutor-chat');
+  chat.innerHTML = '';
+  const greet = S.lang === 'es'
+    ? `¡Hola${S.name ? ', ' + S.name : ''}! Soy Turbococo 🥥 Toca una pregunta de abajo.`
+    : `Hi${S.name ? ', ' + S.name : ''}! I'm Turbococo 🥥 Tap a question below.`;
+  tutorAddMsg('bot', greet);
+  speak(greet);
+  renderTutorQuick();
+}
+function closeTutor() {
+  $('tutor-overlay').classList.remove('show');
+  speechSynthesis.cancel();
+}
+
+function renderTutorQuick() {
+  const wrap = $('tutor-quick');
+  if (!wrap) return;
+  const letterLbl = S.lang === 'es' ? 'Sonidos de letras' : 'Letter sounds';
+  const otherLbl  = S.lang === 'es' ? 'Otras cosas' : 'Other things';
+  const consLessons = LESSONS.filter(l => l.cons && S.unlocked.includes(l.id));
+  const seen = new Set();
+  const letterBtns = consLessons.filter(l => !seen.has(l.cons) && seen.add(l.cons)).map(l => {
+    const label = l.cons === 'V' ? (S.lang === 'es' ? 'Vocales' : 'Vowels') : l.cons;
+    return `<button class="tutor-q-btn" onclick="tutorAskLetter('${l.cons}')">${l.icon} ${label}</button>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="tutor-q-section-label">${letterLbl}</div>
+    ${letterBtns}
+    <div class="tutor-q-section-label">${otherLbl}</div>
+    <button class="tutor-q-btn" onclick="tutorAsk('joke')">😄 ${S.lang === 'es' ? 'Cuéntame un chiste' : 'Tell me a joke'}</button>
+    <button class="tutor-q-btn" onclick="tutorAsk('fact')">🧠 ${S.lang === 'es' ? 'Dato curioso' : 'Fun fact'}</button>
+    <button class="tutor-q-btn" onclick="tutorAsk('encourage')">💛 ${S.lang === 'es' ? 'Dame ánimo' : 'Cheer me up'}</button>
+  `;
+}
+
+function tutorAskLetter(cons) {
+  const qText = S.lang === 'es'
+    ? `¿Cómo suena la ${cons === 'V' ? 'vocales' : cons}?`
+    : `How does ${cons === 'V' ? 'the vowels' : cons} sound?`;
+  tutorAddMsg('user', qText);
+  const resp = tutorLetterInfo(cons);
+  setTimeout(() => { tutorAddMsg('bot', resp); speak(resp); }, 300);
+}
+
+function tutorAsk(kind) {
+  const banks  = {joke: TUTOR_JOKES, fact: TUTOR_FACTS, encourage: TUTOR_ENCOURAGEMENT};
+  const labels = {
+    joke:      S.lang === 'es' ? 'Cuéntame un chiste' : 'Tell me a joke',
+    fact:      S.lang === 'es' ? 'Dato curioso'        : 'Fun fact',
+    encourage: S.lang === 'es' ? 'Dame ánimo'           : 'Cheer me up',
+  };
+  tutorAddMsg('user', labels[kind]);
+  const resp = rand(banks[kind][S.lang] || banks[kind].es);
+  setTimeout(() => { tutorAddMsg('bot', resp); speak(resp); sfxTap(); }, 300);
+}
+
+// ══════════════════════════════════════════════
 //  AVATAR DE BLOQUES 3D (diseño propio, con CSS 3D — sin usar
 //  ningún logo, personaje ni activo de terceros)
 // ══════════════════════════════════════════════
@@ -967,6 +1112,16 @@ function launchLesson(id) {
   S.currentLesson = id;
   S.gameStep    = 0;
   S.gameTotal   = lesson.game === 'tracing' ? 1 : lesson.game === 'repaso' ? 20 : 5;
+
+  // Dificultad adaptativa: si el niño repite una lección de sílabas que ya
+  // completó antes, ajusta cuántas rondas hacen falta según su dominio real.
+  if (lesson.cons && S.badges.includes(`lesson_${lesson.id}`)) {
+    const mastery = familyMastery(lesson.cons);
+    if (mastery !== null) {
+      if (mastery >= 0.85)      S.gameTotal = 3; // ya lo domina: repaso rápido
+      else if (mastery < 0.6)   S.gameTotal = 7; // le cuesta: más práctica
+    }
+  }
   S.correctCount = 0;
   S.startHearts  = S.hearts;
 
@@ -1612,6 +1767,8 @@ function goToTrophies() {
   $('t-xp').textContent     = S.xp;
   $('t-streak').textContent = S.streak;
   $('t-games').textContent  = S.games;
+  $('mastery-title').textContent = S.lang === 'es' ? 'Dominio por familia' : 'Mastery by family';
+  renderMasteryList();
   $('badges-full-grid').innerHTML = BADGES.map(b => {
     const earned = S.badges.includes(b.id);
     return `<div class="badge-full ${earned?'earned':'locked'}">
@@ -1619,6 +1776,31 @@ function goToTrophies() {
       <div class="bf-name">${b.name[S.lang]}</div>
       <div class="bf-desc">${b.desc[S.lang]}</div>
     </div>`;
+  }).join('');
+}
+
+function renderMasteryList() {
+  const el = $('mastery-list');
+  if (!el) return;
+  const learnedCons = LESSONS.filter(l => l.cons && S.unlocked.includes(l.id))
+    .map(l => l.cons).filter((c, i, arr) => arr.indexOf(c) === i);
+  if (!learnedCons.length) {
+    el.innerHTML = `<div class="mastery-empty">${S.lang === 'es' ? 'Todavía no hay datos suficientes.' : 'Not enough data yet.'}</div>`;
+    return;
+  }
+  el.innerHTML = learnedCons.map(cons => {
+    const m = familyMastery(cons);
+    const pct = m === null ? 0 : Math.round(m * 100);
+    const label = cons === 'V' ? '🌟' : cons;
+    const color = m === null ? 'var(--muted)' : m >= 0.85 ? '#22c55e' : m >= 0.6 ? '#fbbf24' : '#f43f5e';
+    return `
+      <div class="mastery-row">
+        <div class="mastery-label">${label}</div>
+        <div class="mastery-bar-track">
+          <div class="mastery-bar-fill" style="width:${m === null ? 6 : pct}%;background:${m === null ? 'var(--border)' : color}"></div>
+        </div>
+        <div class="mastery-pct">${m === null ? '—' : pct + '%'}</div>
+      </div>`;
   }).join('');
 }
 
